@@ -1,0 +1,32 @@
+Część graficzna klienta Netacki
+===============================
+
+Wersja beta: lista kolorów za krótka.
+
+Kompilacja:
+
+make
+
+Jeśli chcemy mieć wydruki śledzące, to trzeba dodać -DDEBUG.  
+
+Wywołanie:
+
+./gui1 [<port>]
+
+Domyślny port to 12346. 
+
+Zrealizowane w Gtk-2 i generalnie zgodne z opisem komunikacji w zadaniu.
+U góry przyciski ze strzałkami w lewo/prawo oraz (nieczynne) czyszczenie
+ekranu.
+
+Pod tym pole gry, reaguje na klawisze strzałek.  Po prawej lista graczy 
+w odpowiednich kolorach (zgodnych z planszą).
+
+Obecna wersja obsługuje tylko jednego gracza.  Zakończenie przez
+zamknięcie okna, co powoduje zamknięcie połączenia TCP i głównego
+programu klienta.
+
+Dla chętnych: podkatalogi gui2 i gui3 zawierają wersje napisane z użyciem
+biblioteki Cairo, odpowiednio dla Gtk-2 i Gtk-3 (gdzie jest jedynym
+oficjalnym API dla grafiki).  Węże są nieco ,,tłustsze''.
+

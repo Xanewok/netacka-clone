@@ -1,0 +1,22 @@
+Część graficzna klienta Netacki
+===============================
+
+Wersja beta.
+
+Wywołanie:
+
+./gui1 [<port>]
+
+Domyślny port to 12346. 
+
+Zrealizowane w GTK-2 i generalnie zgodne z opisem komunikacji w zadaniu.
+U góry przyciski ze strzałkami w lewo/prawo oraz (nieczynne) czyszczenie
+ekranu.
+
+Pod tym pole gry, jeśli jest wybrane myszą (początkowo jest), to
+reaguje na klawisze strzałek.  Po prawej lista graczy w odpowiednich 
+kolorach (zgodnych z planszą).
+
+Obecna wersja obsługuje tylko jednego gracza.  Zakończenie przez
+zamknięcie okna, co powoduje zamknięcie połączenia TCP i głównego
+programu klienta.

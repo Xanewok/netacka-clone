@@ -13,10 +13,10 @@ OBJS = rand.o
 all: $(BINS)
 
 siktacka-server: server.o $(OBJS)
-	$(CXX) $(CXXFLAGS) $< -o $@
+	$(CXX) $(CXXFLAGS) $(OBJS) $< -o $@
 
 siktacka-client: client.o $(OBJS)
-	$(CXX) $(CXXFLAGS) $< -o $@
+	$(CXX) $(CXXFLAGS) $(OBJS) $< -o $@
 
 
 %.o: %.cc

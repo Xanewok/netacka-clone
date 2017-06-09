@@ -2,6 +2,9 @@
 siktacka-server
 siktacka-client
 
+.idea/
+cmake-build-*/
+
 # Prerequisites
 *.d
 

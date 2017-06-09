@@ -11,7 +11,7 @@ enum event_type_t : std::uint8_t
 	PIXEL = 1,
 	PLAYER_ELIMINATED = 2,
 	GAME_OVER = 3,
-	UNKNOWN = static_cast<std::uint8_t>(~0u),
+	UNKNOWN = 0xFF,
 };
 
 struct event
@@ -20,10 +20,11 @@ struct event
 	const event_type_t event_type;
 	std::uint32_t event_no; // consecutive values for each game session,
 	std::uint32_t crc32; // crc checksum from len to, including, event_type
+	event();
     event(event_type_t type);
 	virtual ~event() = default;
 
-	event_type_t get_event_type() const;
+	virtual std::uint32_t calculate_len() const;
 	virtual std::vector<std::uint8_t> as_stream() const;
 	// Overridable for extending subclasses
 	virtual std::vector<std::uint8_t> aux_as_stream() const;
@@ -39,7 +40,7 @@ struct new_game : public event
     // ends with '\0'
 	new_game();
 	virtual ~new_game() = default;
-	virtual std::vector<std::uint8_t> as_stream() const override;
+	virtual std::uint32_t calculate_len() const override;
 	virtual std::vector<std::uint8_t> aux_as_stream() const override;
 };
 
@@ -50,7 +51,7 @@ struct pixel : public event
     std::uint32_t y;
 	pixel();
 	virtual ~pixel() = default;
-	virtual std::vector<std::uint8_t> as_stream() const override;
+	virtual std::uint32_t calculate_len() const override;
 	virtual std::vector<std::uint8_t> aux_as_stream() const override;
 };
 
@@ -59,7 +60,7 @@ struct player_eliminated : public event
     std::uint8_t player_number;
 	player_eliminated();
 	virtual ~player_eliminated() = default;
-	virtual std::vector<std::uint8_t> as_stream() const override;
+	virtual std::uint32_t calculate_len() const override;
 	virtual std::vector<std::uint8_t> aux_as_stream() const override;
 };
 
@@ -67,7 +68,6 @@ struct game_over : public event
 {
 	game_over();
 	virtual ~game_over() = default;
-	virtual std::vector<std::uint8_t> as_stream() const override;
 	virtual std::vector<std::uint8_t> aux_as_stream() const override;
 };
 

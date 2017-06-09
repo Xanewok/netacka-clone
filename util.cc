@@ -1,9 +1,55 @@
 #include "util.h"
 #include <cstdlib>
 #include <cstring>
+#include <stdexcept>
+#include <limits>
 
 namespace util
 {
+
+std::int64_t parse(const char* s)
+{
+	if (s == nullptr || *s == '\0')
+		throw std::invalid_argument("null or empty string argument");
+
+	bool negative = (s[0] == '-');
+	if ( *s == '+' || *s == '-' ) 
+		++s;
+
+	std::int64_t ret = 0;
+	while (*s)
+	{
+		ret = ret * 10 - (*s - '0'); // assume negative since |min| >= |max|
+
+		if (*s < '0' || *s > '9')
+			throw std::invalid_argument(std::string("invalid input string") + std::string(s));
+
+		if (ret > 0)
+			throw std::overflow_error("overflow occured when parsing");
+
+		++s;
+	}
+	ret = negative ? ret : -ret;
+	if (negative != (ret < 0) && ret != 0)
+		throw std::overflow_error("overflow occured when parsing");
+
+	return ret;
+}
+
+std::int64_t parse_bounded(const char* s,
+		std::int64_t min = std::numeric_limits<std::int64_t>::min(),
+		std::int64_t max = std::numeric_limits<std::int64_t>::max())
+{
+	std::int64_t value = parse(s);
+	if (value < min || value > max)
+	{
+		throw std::invalid_argument(std::string("parsed value outside given"
+			"range [" + std::to_string(min) + "; " + std::to_string(max) + "]"));
+	}
+
+	return value;
+		
+}
 
 bool is_valid_player_name(const char* str)
 {

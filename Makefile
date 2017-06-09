@@ -23,4 +23,4 @@ siktacka-client: client.o $(OBJS)
 	$(CXX) -c $(CXXFLAGS) $< -o $@
 
 clean:
-	rm $(BINS) *.o
+	rm -f $(BINS) *.o

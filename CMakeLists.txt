@@ -33,7 +33,9 @@ set(SOURCE_FILES
         rand.cc
         rand.h
         util.cc
-        util.h)
+        util.h
+        protocol.cc
+        protocol.h)
 
 add_executable(netacka-server server.cc ${SOURCE_FILES})
 add_executable(netacka-client client.cc ${SOURCE_FILES})

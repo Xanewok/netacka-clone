@@ -37,7 +37,8 @@ struct new_game : public event
     std::uint32_t maxy;
     std::vector<std::string> player_names; // each name is up to 64 chars and
     // ends with '\0'
-	new_game();
+	new_game(std::uint32_t width, std::uint32_t height,
+		const std::vector<std::string>& names);
 	virtual ~new_game() = default;
 	virtual std::uint32_t calculate_len() const override;
 	virtual std::vector<std::uint8_t> aux_as_stream() const override;
@@ -48,7 +49,7 @@ struct pixel : public event
     std::uint8_t player_number;
     std::uint32_t x;
     std::uint32_t y;
-	pixel();
+	pixel(std::uint8_t player, std::uint32_t px, std::uint32_t py);
 	virtual ~pixel() = default;
 	virtual std::uint32_t calculate_len() const override;
 	virtual std::vector<std::uint8_t> aux_as_stream() const override;
@@ -57,7 +58,7 @@ struct pixel : public event
 struct player_eliminated : public event
 {
     std::uint8_t player_number;
-	player_eliminated();
+	player_eliminated(std::uint8_t player);
 	virtual ~player_eliminated() = default;
 	virtual std::uint32_t calculate_len() const override;
 	virtual std::vector<std::uint8_t> aux_as_stream() const override;

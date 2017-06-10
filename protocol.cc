@@ -76,7 +76,15 @@ std::vector<std::uint8_t> event::aux_as_stream() const
 	return {};
 }
 
-new_game::new_game() : event(NEW_GAME) {}
+
+new_game::new_game(std::uint32_t width, std::uint32_t height,
+	const std::vector<std::string>& names)
+: event(NEW_GAME)
+, maxx(width)
+, maxy(height)
+, player_names(names)
+{
+}
 
 std::uint32_t new_game::calculate_len() const
 {
@@ -104,7 +112,14 @@ std::vector<std::uint8_t> new_game::aux_as_stream() const
 	return stream;
 }
 
-pixel::pixel() : event(PIXEL) {}
+
+pixel::pixel(std::uint8_t player, std::uint32_t px, std::uint32_t py)
+: event(PIXEL)
+, player_number(player)
+, x(px)
+, y(py)
+{
+}
 
 std::uint32_t pixel::calculate_len() const
 {
@@ -124,7 +139,11 @@ std::vector<std::uint8_t> pixel::aux_as_stream() const
 	return stream;
 }
 
-player_eliminated::player_eliminated() : event(PLAYER_ELIMINATED) {}
+player_eliminated::player_eliminated(std::uint8_t player)
+: event(PLAYER_ELIMINATED)
+, player_number(player)
+{
+}
 
 std::uint32_t player_eliminated::calculate_len() const
 {

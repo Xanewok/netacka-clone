@@ -1,6 +1,7 @@
 #include "protocol.h"
 
 #include <cstdint>
+#include <cstring>
 #include <vector>
 #include <string>
 #include <memory>
@@ -12,6 +13,7 @@
 #else
 #include <arpa/inet.h>
 #include <endian.h> // TODO: Verify
+#define htonll htobe64
 #endif
 
 namespace

@@ -26,7 +26,7 @@ std::int64_t parse(const char* s)
 		throw std::invalid_argument("null or empty string argument");
 
 	bool negative = (s[0] == '-');
-	if ( *s == '+' || *s == '-' ) 
+	if (*s == '+' || *s == '-')
 		++s;
 
 	std::int64_t ret = 0;
@@ -56,12 +56,11 @@ std::int64_t parse_bounded(const char* s,
 	std::int64_t value = parse(s);
 	if (value < min || value > max)
 	{
-		throw std::invalid_argument(std::string("parsed value outside given"
+		throw std::invalid_argument(std::string("parsed value outside given "
 			"range [" + std::to_string(min) + "; " + std::to_string(max) + "]"));
 	}
 
 	return value;
-		
 }
 
 bool is_valid_player_name(const char* str)

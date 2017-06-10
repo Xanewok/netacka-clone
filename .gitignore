@@ -4,7 +4,9 @@ siktacka-client
 
 .idea/
 .vs/
+.vscode/
 cmake-build-*/
+build/
 
 # Prerequisites
 *.d

@@ -8,6 +8,7 @@
 #include <ctime>
 #include <set>
 #include <memory>
+#include <chrono>
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -16,6 +17,8 @@
 #include "protocol.h"
 #include "util.h"
 #include "rand.h"
+
+using namespace std::chrono;
 
 constexpr const char* usage_msg =
 "USAGE:  ./siktacka-server [-W n] [-H n] [-p n] [-s n] [-t n] [-r n]\n"
@@ -40,9 +43,9 @@ static struct {
 	bool seed_provided = false;
 } configuration;
 
-static int get_round_time_ms()
+static std::uint64_t get_round_time_ms()
 {
-	static int round_time = 1000 / (float)configuration.rounds_per_sec;
+	static std::uint64_t round_time = 1000 / (float)configuration.rounds_per_sec;
 	return round_time;
 }
 
@@ -59,10 +62,19 @@ struct player_connection {
 	int socket;
 
 	client_message last_message;
-	std::uint64_t last_response_time;
+	duration<std::uint64_t> last_response_time;
+	//std::uint64_t last_response_time;
 
 	bool ready_to_play = false;
 	bool is_waiting = false; // set to true if spectating, but wants to play next
+
+	bool is_inactive() const
+	{
+		auto current = duration_cast<milliseconds>(
+			system_clock::now().time_since_epoch());
+
+		return (current - last_response_time).count() > CONNECTION_TIMEOUT;
+	}
 };
 
 struct name_compare
@@ -91,6 +103,7 @@ static struct {
 	bool in_progress = false;
 	std::set<player_connection, name_compare> players;
 	struct map map;
+	std::vector<std::unique_ptr<event>> events;
 } game_state;
 
 void handle_client_message(client_message& msg)

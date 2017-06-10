@@ -179,5 +179,20 @@ int main(int argc, char* argv[])
 	ret = bind(sock, (struct sockaddr *) &server_address, (socklen_t) sizeof(server_address));
 	ensure_with_errno(ret, "bind");
 
+	// Receive data from clients
+	constexpr size_t BUFFER_SIZE = 100000;
+	char buffer[BUFFER_SIZE];
+	struct sockaddr_in6 client_address;
+	socklen_t snda_len = (socklen_t) sizeof(client_address);
+	while (true)
+	{
+		socklen_t rcva_len = (socklen_t) sizeof(client_address);
+		ssize_t len = recvfrom(sock, buffer,sizeof(buffer), 0,
+			(struct sockaddr *) &client_address, &rcva_len);
+		ensure_with_errno(len, "error on datagram from client socket");
+
+		printf("read from socket: %zd bytes: %.*s\n", len, (int) len, buffer);
+	}
+
 	return 0;
 }

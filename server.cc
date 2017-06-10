@@ -9,6 +9,10 @@
 #include <set>
 #include <memory>
 
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <netinet/in.h>
+
 #include "protocol.h"
 #include "util.h"
 #include "rand.h"
@@ -29,12 +33,18 @@ static Rand rand_gen;
 static struct {
 	std::uint32_t width = 800;
 	std::uint32_t height = 600;
-	int port_num = 12345;
+	std::uint16_t port_num = 12345;
 	int rounds_per_sec = 50;
 	int turning_speed = 6;
 	std::int64_t rand_seed;
 	bool seed_provided = false;
 } configuration;
+
+static int get_round_time_ms()
+{
+	static int round_time = 1000 / (float)configuration.rounds_per_sec;
+	return round_time;
+}
 
 struct player_coords {
 	double x;
@@ -51,6 +61,7 @@ struct player_connection {
 	std::string player_name;
 	bool ready_to_play = false;
 	bool is_waiting = false; // set to true if spectating, but wants to play next
+	int turn_direction = 0;
 	std::uint64_t last_response_time;
 };
 
@@ -77,6 +88,7 @@ struct map {
 
 static struct {
 	std::uint32_t game_id;
+	bool in_progress = false;
 	std::set<player_connection, name_compare> players;
 	struct map map;
 } game_state;
@@ -87,7 +99,13 @@ void handle_client_message(client_message& msg)
 }
 
 namespace {
-
+	void ensure_with_errno(int value, const char* msg)
+	{
+		if (value < 0) {
+			perror(msg);
+			std::exit(1);
+		}
+	}
 } // namespace
 
 int main(int argc, char* argv[])
@@ -118,7 +136,7 @@ int main(int argc, char* argv[])
 		case 'p': configuration.port_num = util::parse_bounded(argv[i + 1], 0, 65535); break;
 		case 's':
 		{
-			configuration.rounds_per_sec = util::parse_bounded(argv[i + 1], 0, std::numeric_limits<int>::max());
+			configuration.rounds_per_sec = util::parse_bounded(argv[i + 1], 1, std::numeric_limits<int>::max());
 			break;
 		}
 		case 't':
@@ -143,5 +161,23 @@ int main(int argc, char* argv[])
 	}
 	// Initialize deterministic random generator
 	rand_gen = Rand(configuration.seed_provided ? configuration.rand_seed : time(nullptr));
-}
 
+	int ret;
+	int sock = socket(AF_INET6, SOCK_DGRAM, 0);
+	ensure_with_errno(sock, "socket");
+
+	// Disable IPv6-only option for sockets
+	int no = 0;
+	setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, (void *)&no, sizeof(no));
+
+	struct sockaddr_in6 server_address;
+	server_address.sin6_family = AF_INET6;
+	server_address.sin6_addr = in6addr_any;
+	printf("%d\n", configuration.port_num);
+	server_address.sin6_port = htons(configuration.port_num);
+
+	ret = bind(sock, (struct sockaddr *) &server_address, (socklen_t) sizeof(server_address));
+	ensure_with_errno(ret, "bind");
+
+	return 0;
+}

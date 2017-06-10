@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <utility>
 
 enum event_type_t : std::uint8_t
 {
@@ -78,6 +79,8 @@ struct client_message
 	std::uint32_t next_expected_event;
 	char player_name[64] = { 0 };
 	std::vector<std::uint8_t> as_stream() const;
+
+	static std::pair<client_message, bool> from(const char* stream, size_t len);
 };
 
 struct server_message

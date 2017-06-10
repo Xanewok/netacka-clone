@@ -6,12 +6,15 @@
 #include <string>
 #include <memory>
 #include <iterator>
+#include <utility>
 
 #ifdef _WIN32
 #pragma comment(lib, "Ws2_32.lib")
 #include <WinSock2.h> // endianness helpers
 #else
 #include <arpa/inet.h>
+#include <sys/types.h>
+#define _BSD_SOURCE
 #include <endian.h> // TODO: Verify
 #define htonll htobe64
 #endif
@@ -177,3 +180,28 @@ std::vector<std::uint8_t> server_message::as_stream() const
 	return stream;
 }
 
+/* static */
+std::pair<client_message, bool> client_message::from(const char* stream, size_t len)
+{
+	if (len <= sizeof(client_message::session_id) + sizeof(client_message::turn_direction)
+		+ sizeof(client_message::next_expected_event) + sizeof('\0'))
+		return std::make_pair(client_message(), false);
+
+	client_message msg;
+
+	msg.session_id = be64toh(*reinterpret_cast<const std::uint64_t*>(stream));
+	stream += sizeof(msg.session_id);
+	msg.turn_direction = *stream;
+	stream += sizeof(msg.turn_direction);
+	msg.next_expected_event = be32toh(*reinterpret_cast<const std::uint32_t*>(stream));
+	stream += sizeof(msg.next_expected_event);
+
+	for (size_t i = 0; i < sizeof(msg.player_name); ++i)
+	{
+		msg.player_name[i] = stream[i];
+		if (stream[i] == '\0')
+			break;
+	}
+
+	return std::make_pair(msg, true);
+}

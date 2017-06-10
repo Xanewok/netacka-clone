@@ -76,13 +76,6 @@ std::vector<std::uint8_t> event::aux_as_stream() const
 	return {};
 }
 
-/* static */
-std::unique_ptr<event> parse_net(const char* buf)
-{
-	// TODO:
-	throw std::exception();
-}
-
 new_game::new_game() : event(NEW_GAME) {}
 
 std::uint32_t new_game::calculate_len() const
@@ -141,8 +134,9 @@ std::uint32_t player_eliminated::calculate_len() const
 
 std::vector<std::uint8_t> player_eliminated::aux_as_stream() const
 {
-	// TODO: Verify proper obj construction
-	return { player_number };
+	std::vector<std::uint8_t> stream;
+	stream.push_back(player_number);
+	return stream;
 }
 
 game_over::game_over() : event(GAME_OVER) {}

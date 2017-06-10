@@ -164,7 +164,7 @@ std::vector<std::uint8_t> server_message::as_stream() const
 {
 	std::vector<std::uint8_t> stream;
 
-	append_bytes(stream, as_bytes(htonll(game_id)));
+	append_bytes(stream, as_bytes(htonl(game_id)));
 	for (const auto& event : events)
 	{
 		auto event_stream = event->as_stream();

@@ -8,7 +8,7 @@ CXXFLAGS += -O2
 endif
 
 BINS = siktacka-server siktacka-client
-OBJS = rand.o util.o protocol.o
+OBJS = rand.o util.o protocol.o crc32.o
 
 all: $(BINS)
 

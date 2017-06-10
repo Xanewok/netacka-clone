@@ -1,4 +1,5 @@
 #include "protocol.h"
+#include "crc32.h"
 
 #include <cstdint>
 #include <cstring>
@@ -40,8 +41,7 @@ namespace
 
 	std::uint32_t calculate_crc(const std::vector<std::uint8_t> stream)
 	{
-		// TODO
-		return 0;
+		return xcrc32(stream.data(), stream.size(), 0);
 	}
 }
 

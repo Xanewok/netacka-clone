@@ -52,24 +52,24 @@ struct player_coords {
 	double rotation; // in degrees, clockwise, 0* = right
 };
 
-// Logically identified by (socket, session_id) pair
+// Players are identified by (socket, session_id) pair
 struct player_connection {
 	constexpr static std::uint64_t CONNECTION_TIMEOUT = 2000; // [ms]
 
 	int socket;
-	std::uint64_t session_id;
-	std::string player_name;
+
+	client_message last_message;
+	std::uint64_t last_response_time;
+
 	bool ready_to_play = false;
 	bool is_waiting = false; // set to true if spectating, but wants to play next
-	int turn_direction = 0;
-	std::uint64_t last_response_time;
 };
 
 struct name_compare
 {
 	bool operator() (const player_connection& lhs, const player_connection& rhs) const
 	{
-		return lhs.player_name < rhs.player_name;
+		return lhs.last_message.player_name < rhs.last_message.player_name;
 	}
 };
 

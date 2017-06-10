@@ -17,6 +17,7 @@
 #include "protocol.h"
 #include "util.h"
 #include "rand.h"
+#include "map.h"
 
 using namespace std::chrono;
 
@@ -83,19 +84,6 @@ struct name_compare
 	{
 		return lhs.last_message.player_name < rhs.last_message.player_name;
 	}
-};
-
-bool in_map(double x, double y)
-{
-	std::uint64_t x_rounded = x;
-	std::uint64_t y_rounded = y;
-
-	return x_rounded >= 0 && x_rounded < configuration.width
-		&& y_rounded >= 0 && y_rounded < configuration.height;
-}
-
-struct map {
-	std::vector<pixel*> pixels;
 };
 
 static struct {
@@ -172,6 +160,9 @@ int main(int argc, char* argv[])
 		}
 		}
 	}
+	// Initialize map
+	game_state.map = map(configuration.width, configuration.height);
+
 	// Initialize deterministic random generator
 	rand_gen = Rand(configuration.seed_provided ? configuration.rand_seed : time(nullptr));
 

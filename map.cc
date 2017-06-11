@@ -28,6 +28,6 @@ bool map::is_occupied(double x, double y) const
 /* static */
 map::position_t map::make_pos(double x, double y)
 {
-    return position_t(static_cast<std::uint64_t>(x),
-        static_cast<std::uint64_t>(y));
+    return position_t(static_cast<std::uint32_t>(x),
+        static_cast<std::uint32_t>(y));
 }

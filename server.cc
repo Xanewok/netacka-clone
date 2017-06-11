@@ -149,7 +149,7 @@ static struct {
 	std::uint32_t game_id;
 	bool in_progress = false;
 	struct map map;
-	std::vector<std::unique_ptr<event>> events;
+	std::vector<std::shared_ptr<event>> events;
 
 	player_collection_t clients;
 
@@ -272,7 +272,7 @@ int broadcast_events(const client_connection& client, size_t max_send_count = 5)
 	return sent;
 }
 
-void generate_event(std::unique_ptr<event> event)
+void generate_event(std::shared_ptr<event> event)
 {
 	// First broadcast the event
 	event->event_no = game_state.events.size() + 1;
@@ -307,7 +307,7 @@ void generate_event(std::unique_ptr<event> event)
 			living_count += player.eliminated ? 0 : 1;
 
 		if (living_count == 1)
-			generate_event(std::make_unique<game_over>());
+			generate_event(std::make_shared<game_over>());
 		break;
 	}
 	case GAME_OVER:
@@ -379,7 +379,7 @@ bool try_start_game()
 		// Use exact specified order/algorithm from the assignment
 		game_state.game_id = rand_gen.next();
 
-		generate_event(std::make_unique<new_game>(game_state.map.width, game_state.map.height,
+		generate_event(std::make_shared<new_game>(game_state.map.width, game_state.map.height,
 			player_names));
 
 		for (auto& player : game_state.players)
@@ -389,11 +389,11 @@ bool try_start_game()
 			player.turn_direction = static_cast<std::uint8_t>(rand_gen.next() % 360);
 
 			if (game_state.map.is_occupied(player.x, player.y))
-				generate_event(std::make_unique<player_eliminated>(player.player_id));
+				generate_event(std::make_shared<player_eliminated>(player.player_id));
 			else
 			{
 				const auto pos = map::make_pos(player.x, player.y);
-				generate_event(std::make_unique<pixel>(player.player_id, pos.first, pos.second));
+				generate_event(std::make_shared<pixel>(player.player_id, pos.first, pos.second));
 			}
 		}
 	}
@@ -491,9 +491,9 @@ void do_game_tick()
 			continue;
 
 		if (!game_state.map.is_inside(new_pos) || game_state.map.is_occupied(new_pos))
-			generate_event(std::make_unique<player_eliminated>(player.player_id));
+			generate_event(std::make_shared<player_eliminated>(player.player_id));
 		else
-			generate_event(std::make_unique<pixel>(player.player_id, new_pos.first, new_pos.second));
+			generate_event(std::make_shared<pixel>(player.player_id, new_pos.first, new_pos.second));
 	}
 }
 

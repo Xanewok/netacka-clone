@@ -63,7 +63,7 @@ struct event
 	// Overridable for extending subclasses
 	virtual std::vector<std::uint8_t> aux_as_stream() const;
 
-	static std::unique_ptr<event> parse(const char* buf, size_t len);
+	static std::shared_ptr<event> parse(const char* buf, size_t len);
 	virtual const uint8_t* parse_event_data(const uint8_t* buf, size_t len);
 };
 

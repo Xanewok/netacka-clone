@@ -65,14 +65,14 @@ namespace
 		stream.insert(stream.end(), str, str + strlen(str));
 	}
 
-	std::unique_ptr<event> create_event(event_type_t event_type)
+	std::shared_ptr<event> create_event(event_type_t event_type)
 	{
 		switch (event_type)
 		{
-		case NEW_GAME: return std::make_unique<new_game>();
-		case PLAYER_ELIMINATED: return std::make_unique<player_eliminated>();
-		case PIXEL: return std::make_unique<pixel>();
-		case GAME_OVER: return std::make_unique<game_over>();
+		case NEW_GAME: return std::make_shared<new_game>();
+		case PLAYER_ELIMINATED: return std::make_shared<player_eliminated>();
+		case PIXEL: return std::make_shared<pixel>();
+		case GAME_OVER: return std::make_shared<game_over>();
 		default: return nullptr;
 		}
 	}
@@ -115,7 +115,7 @@ std::vector<std::uint8_t> event::aux_as_stream() const
 }
 
 /* static */
-std::unique_ptr<event> parse(const char* buf, size_t buf_len)
+std::shared_ptr<event> parse(const char* buf, size_t buf_len)
 {
 	const std::uint8_t* stream = reinterpret_cast<const std::uint8_t*>(buf);
 	const std::uint8_t* pointer = stream;

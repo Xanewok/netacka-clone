@@ -8,6 +8,30 @@
 
 constexpr int MAX_EVENT_PACKET_DATA_SIZE = 512;
 
+struct event;
+
+struct client_message
+{
+	std::uint64_t session_id;
+	std::int8_t turn_direction;
+	std::uint32_t next_expected_event;
+	char player_name[64] = { 0 };
+	std::vector<std::uint8_t> as_stream() const;
+
+	static std::pair<client_message, bool> from(const char* stream, size_t len);
+};
+
+struct server_message
+{
+	std::uint32_t game_id;
+	std::vector<event*> events;
+
+	constexpr static int HEADER_LEN = sizeof(server_message::game_id);
+
+	std::vector<std::uint8_t> as_stream() const;
+};
+
+
 enum event_type_t : std::uint8_t
 {
 	NEW_GAME = 0,
@@ -24,7 +48,8 @@ struct event
 	std::uint32_t event_no; // consecutive values for each game session,
 	std::uint32_t crc32; // crc checksum from len to, including, event_type
 
-	constexpr static int HEADER_LEN = sizeof(len) + sizeof(event_type) + sizeof(event_no);
+	constexpr static int HEADER_LEN = sizeof(event::len) +
+		sizeof(event::event_type) + sizeof(event::event_no);
 
 	event();
     event(event_type_t type);
@@ -53,6 +78,10 @@ struct new_game : public event
 	virtual std::vector<std::uint8_t> aux_as_stream() const override;
 	virtual const uint8_t* parse_event_data(const uint8_t* buf, size_t len) override;
 };
+
+constexpr int MAX_PLAYER_NAMES_LEN = MAX_EVENT_PACKET_DATA_SIZE -
+(sizeof(new_game) - sizeof(new_game::player_names))
+- server_message::HEADER_LEN; // account for server_message header which will contain new_game event
 
 struct pixel : public event
 {
@@ -83,22 +112,4 @@ struct game_over : public event
 	game_over();
 	virtual ~game_over() = default;
 	virtual std::vector<std::uint8_t> aux_as_stream() const override;
-};
-
-struct client_message
-{
-	std::uint64_t session_id;
-	std::int8_t turn_direction;
-	std::uint32_t next_expected_event;
-	char player_name[64] = { 0 };
-	std::vector<std::uint8_t> as_stream() const;
-
-	static std::pair<client_message, bool> from(const char* stream, size_t len);
-};
-
-struct server_message
-{
-	std::uint32_t game_id;
-	std::vector<event*> events;
-	std::vector<std::uint8_t> as_stream() const;
 };

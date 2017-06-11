@@ -270,9 +270,6 @@ void generate_event(std::unique_ptr<event> event)
 
 bool try_start_game()
 {
-	constexpr int MAX_PLAYER_NAMES_LEN = MAX_EVENT_PACKET_DATA_SIZE -
-		(sizeof(new_game) - sizeof(new_game::player_names));
-
 	std::vector<client_connection*> ready_clients;
 	int player_names_len = 0;
 	for (auto& client_kv : game_state.clients)

@@ -146,7 +146,7 @@ struct in6_addr_port_compare
 
 using player_collection_t = std::map<sockaddr_in6, client_connection, in6_addr_port_compare>;
 static struct {
-	std::uint32_t game_id = 0;
+	std::uint32_t game_id;
 	bool in_progress = false;
 	struct map map;
 	std::vector<std::unique_ptr<event>> events;
@@ -158,6 +158,25 @@ static struct {
 
 	std::chrono::milliseconds next_game_tick = std::chrono::milliseconds(0);
 } game_state;
+
+// TODO: Use it
+void prune_inactive_clients()
+{
+	for (auto it = game_state.clients.begin(); it != game_state.clients.end();)
+	{
+		client_connection& client = it->second;
+
+		if (client.is_inactive())
+		{
+			if (client.player)
+				client.player->connection = nullptr;
+
+			it = game_state.clients.erase(it);
+		}
+		else
+			++it;
+	}
+}
 
 // TODO: FACTOR OUT SERVER STATE AND CONTAINING RANDOM GENERATOR, CONFIGURATION, OPEN SOCKET AND PLAYER CONNECTIONS
 // + PLAYER GAME STATE

@@ -36,7 +36,11 @@ set(SOURCE_FILES
         util.cc
         util.h
         protocol.cc
-        protocol.h)
+        protocol.h
+        map.cc
+        map.h
+        crc32.cc
+        crc32.h)
 
-add_executable(netacka-server server.cc ${SOURCE_FILES})
-add_executable(netacka-client client.cc ${SOURCE_FILES})
+add_executable(siktacka-server server.cc ${SOURCE_FILES})
+add_executable(siktacka-client client.cc ${SOURCE_FILES})

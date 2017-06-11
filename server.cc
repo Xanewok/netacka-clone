@@ -37,6 +37,7 @@ using ssize_t = SSIZE_T;
 #include "map.h"
 
 using namespace std::chrono;
+using namespace std::chrono_literals;
 
 constexpr const char* usage_msg =
 "USAGE:  ./siktacka-server [-W n] [-H n] [-p n] [-s n] [-t n] [-r n]\n"
@@ -48,6 +49,8 @@ constexpr const char* usage_msg =
 "  -t n – liczba całkowita wyznaczająca szybkość skrętu (parametr\n"
 "          TURNING_SPEED, domyślnie 6)\n"
 "  -r n – ziarno generatora liczb losowych (opisanego poniżej)\n";
+
+constexpr std::chrono::milliseconds CLIENT_CONNECTION_TIMEOUT = 2000ms;
 
 std::chrono::milliseconds current_time_ms()
 {
@@ -81,12 +84,11 @@ struct player_transform {
 
 // Players are identified by (socket, session_id) pair
 struct player_connection {
-	constexpr static std::uint64_t CONNECTION_TIMEOUT = 2000; // [ms]
 
 	sockaddr_in6 socket;
-	duration<std::uint64_t> last_response_time;
 
 	client_message last_message;
+	std::chrono::milliseconds last_message_time;
 
 	player_transform transform;
 	bool ready_to_play = false; // pressed arrow when waiting for NEW_GAME
@@ -95,7 +97,7 @@ struct player_connection {
 
 	bool is_inactive() const
 	{
-		return (current_time_ms() - last_response_time).count() > CONNECTION_TIMEOUT;
+		return (current_time_ms() - last_message_time) > CLIENT_CONNECTION_TIMEOUT;
 	}
 };
 

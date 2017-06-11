@@ -6,6 +6,8 @@
 #include <memory>
 #include <utility>
 
+constexpr int MAX_EVENT_PACKET_DATA_SIZE = 512;
+
 enum event_type_t : std::uint8_t
 {
 	NEW_GAME = 0,

@@ -76,24 +76,30 @@ static std::uint64_t get_round_time_ms()
 	return round_time;
 }
 
-struct player_transform {
-	double x;
-	double y;
-	double rotation; // in degrees, clockwise, 0* = right
+// Players are identified by (socket, session_id) pair
+enum client_state {
+	playing, // actively playing now during current game
+	waiting, // wants to join next game
+	spectating, // only spectates and doesn't want to join
 };
 
-// Players are identified by (socket, session_id) pair
-struct player_connection {
+struct server_player;
 
+struct client_connection {
 	sockaddr_in6 socket;
 
 	client_message last_message;
 	std::chrono::milliseconds last_message_time;
 
-	player_transform transform;
+	server_player* player = nullptr;
+
 	bool ready_to_play = false; // pressed arrow when waiting for NEW_GAME
-	bool waiting = false; // set to true if spectating, but wants to play next
-	bool eliminated = false;
+	client_state state = client_state::spectating;
+
+	bool is_playing() const
+	{
+		return player != nullptr;
+	}
 
 	bool is_inactive() const
 	{
@@ -101,9 +107,26 @@ struct player_connection {
 	}
 };
 
+struct player
+{
+	std::string name;
+	std::uint8_t player_id;
+	bool eliminated = false;
+};
+
+struct server_player : public player
+{
+	double x = 0;
+	double y = 0;
+	double rotation = 0; // in degrees, clockwise, 0* = right
+	std::uint8_t turn_direction = 0;
+	client_connection* connection = nullptr;
+};
+
+
 // Helper struct that allows to compare sockaddr_in6 structures and also to
 // convert them to comparable tuples (pair of (addr, port) identifies the struct)
-struct in6_compare
+struct in6_addr_port_compare
 {
 	template<size_t off>
 	static std::uint64_t addr_part(const sockaddr_in6& addr)
@@ -122,32 +145,17 @@ struct in6_compare
 	}
 };
 
-using player_collection_t = std::map<sockaddr_in6, player_connection, in6_compare>;
+using player_collection_t = std::map<sockaddr_in6, client_connection, in6_addr_port_compare>;
 static struct {
 	std::uint32_t game_id = 0;
 	bool in_progress = false;
 	struct map map;
 	std::vector<std::unique_ptr<event>> events;
 
-	player_collection_t active_players;
-	player_collection_t spectators_or_waiting;
+	player_collection_t clients;
 
 	// Cached players with ordering for given game (reinitialized for every game)
-	std::vector<player_connection*> playing_players;
-
-	// TODO: USE ONLY ONE PLAYER CONNECTION COLLECTION (MAP) WITH KEY SOCKET -> STRUCT WITH PLAYER INFO
-	// ALSO HAVE SORTED VECTORS FOR ACTIVE PLAYERS DURING THAT GAME
-	// WE WILL USE THAT TO GET PLAYER NUM (OR PREFERABLY STORE THAT WITH SET-PLAYER NAME? ON GAME STARTUP
-
-	// OR EVEN STH LIKE STRUCT { X, Y, ROT, NAME, NUMBER , POINTER TO PLAYER_CONNECTION } BUT UNSURE WHERE
-	// TO PUT READINESS/SPECTATOR STATE (SPECTATOR MUST BE IN CONNECTION PART AT LEAST, BUT GAME READINESS
-	// IS BASICALLY CONNECTION/GAME STARTUP RELATED)
-
-	// THIS WAY WE CAN USE ONLY ONE PLAYER CONNECTION FOR FINDING/ITERATORS
-
-	// MOVING PLAYING->SPECTATING WOULD RETAIN PLAYING PLAYER STRUCT BUT CHANGE SPECTATING FLAG IN CONNECTION
-	// MOVING SPECTATING->PLAYING WOULD ONLY HAPPEN ON GAME START, CHANGE SPECTATING FLAG TO FALSE AND INITIALIZE
-	// PLAYING PLAYER STRUCT
+	std::vector<server_player> players;
 
 	std::chrono::milliseconds next_game_tick = std::chrono::milliseconds(0);
 } game_state;
@@ -156,91 +164,42 @@ static struct {
 // + PLAYER GAME STATE
 // STRUCTS AND DEFS COULD BE IN SERVER.H AND THIS FILE WOULD ONLY BASICALLY PARSE ARGS, OPEN SOCKET
 
-std::pair<player_collection_t::iterator, bool> find_player(const struct sockaddr_in6& sock)
-{
-	const std::array<player_collection_t*, 2> players = {
-		&game_state.active_players, &game_state.spectators_or_waiting
-	};
-
-	for (const auto& collection : players)
-	{
-		auto it = collection->find(sock);
-		if (it != collection->end())
-			return std::make_pair(it, true);
-	}
-
-	return std::make_pair(player_collection_t::iterator(), false);
-}
-
-int get_living_players_num()
-{
-	int living_players = 0;
-	for (const auto& player : game_state.playing_players)
-		if (player->eliminated == false)
-			living_players++;
-
-	return living_players;
-}
-
 void cleanup_game()
 {
 	game_state.in_progress = false;
-	game_state.game_id++;
 	game_state.map = map(configuration.width, configuration.height);
 	game_state.events.clear(); // TODO: Verify
-}
 
-void generate_event(std::unique_ptr<event> event);
-
-void start_game()
-{
-	game_state.in_progress = true;
-
-	game_state.playing_players.clear();
-	for (auto& kv : game_state.active_players)
+	for (auto& client_kv : game_state.clients)
 	{
-		kv.second.eliminated = false;
-		kv.second.waiting = false;
-		game_state.playing_players.push_back(&kv.second);
-	}
+		auto& client = client_kv.second;
 
-	std::sort(game_state.playing_players.begin(), game_state.playing_players.end(),
-		[](const player_connection* lhs, const player_connection* rhs)
+		if (client.state == client_state::playing)
 		{
-			return lhs->last_message.player_name < rhs->last_message.player_name;
+			client.state = client_state::waiting;
+			client.player = nullptr;
 		}
-	);
-
-	std::vector<std::string> names;
-	for (const auto& player : game_state.playing_players)
-		names.push_back(player->last_message.player_name); // TODO: MAKE SURE player_name is not null (catch player name change)
-
-	auto event = std::unique_ptr<new_game>(new new_game(configuration.width, configuration.height, names));
-	generate_event(std::move(event));
+	}
+	game_state.players.clear();
 }
 
 static int server_socket;
 
+// TODO: Send series of messages up to next_expected_event for each player individually
+// TODO: bundle up net messages
 void broadcast_event(struct event* event)
 {
 	const auto buffer = event->as_stream();
 
-	const std::array<const player_collection_t*, 2> players = {
-		&game_state.active_players, &game_state.spectators_or_waiting
-	};
-
-	for (const auto& collection_pointer : players)
+	for (const auto& client_kv : game_state.clients)
 	{
-		for (const auto& kv : (player_collection_t&) *collection_pointer)
-		{
-			const sockaddr_in6& client_address = kv.first;
+		const sockaddr_in6& client_address = client_kv.first;
 
-			ssize_t snd_len = sendto(server_socket, (const char*)buffer.data(), buffer.size(), 0,
-				(sockaddr*) &client_address, sizeof(client_address));
+		ssize_t snd_len = sendto(server_socket, (const char*)buffer.data(), buffer.size(), 0,
+			(sockaddr*)&client_address, sizeof(client_address));
 
-			if (snd_len != static_cast<ssize_t>(buffer.size()))
-				fprintf(stderr, "Error sending event: %s\n", buffer.data());
-		}
+		if (snd_len != static_cast<ssize_t>(buffer.size()))
+			fprintf(stderr, "Error sending event: %s\n", buffer.data());
 	}
 }
 
@@ -249,6 +208,7 @@ void generate_event(std::unique_ptr<event> event)
 	// First broadcast the event
 	event->event_no = game_state.events.size() + 1;
 
+	// TODO: Send series of messages up to next_expected_event for each player individually
 	auto raw_event = event.get();
 	broadcast_event(raw_event);
 
@@ -257,11 +217,10 @@ void generate_event(std::unique_ptr<event> event)
 	// Then act accordingly
 	switch (event->event_type)
 	{
+	// try_start_game is the only function responsible for generating NEW_GAME
+	// and is already initializing game, so don't do anything here
 	case NEW_GAME:
-	{
-		start_game();
 		break;
-	}
 	case PIXEL:
 	{
 		pixel* pixel_event = static_cast<pixel*>(raw_event);
@@ -272,11 +231,14 @@ void generate_event(std::unique_ptr<event> event)
 	case PLAYER_ELIMINATED:
 	{
 		std::int8_t player_num = static_cast<player_eliminated*>(raw_event)->player_number;
-		game_state.playing_players[player_num]->eliminated = true;
+		game_state.players[player_num].eliminated = true;
 
-		if (get_living_players_num() == 1) {
+		int living_count = 0;
+		for (const auto& player : game_state.players)
+			living_count += player.eliminated ? 0 : 1;
+
+		if (living_count == 1)
 			generate_event(std::make_unique<game_over>());
-		}
 		break;
 	}
 	case GAME_OVER:
@@ -288,16 +250,101 @@ void generate_event(std::unique_ptr<event> event)
 	}
 }
 
+bool try_start_game()
+{
+	constexpr int MAX_PLAYER_NAMES_LEN = MAX_EVENT_PACKET_DATA_SIZE -
+		(sizeof(new_game) - sizeof(new_game::player_names));
+
+	std::vector<client_connection*> ready_clients;
+	int player_names_len = 0;
+	for (auto& client_kv : game_state.clients)
+	{
+		client_connection& client = client_kv.second;
+		if (client.state == client_state::waiting && client.ready_to_play)
+		{
+			const int name_len = strlen(client.last_message.player_name) + sizeof('\0');
+			if (player_names_len + name_len <= MAX_PLAYER_NAMES_LEN)
+			{
+				player_names_len += name_len;
+				ready_clients.push_back(&client);
+			}
+		}
+	}
+
+	constexpr int MIN_PLAYERS = 2;
+	if (ready_clients.size() < MIN_PLAYERS)
+	{
+		return false;
+	}
+	// We can start a new game now!
+	else
+	{
+		const auto player_count = ready_clients.size();
+
+		// Initialize 
+		game_state.players.resize(player_count);
+		for (size_t i = 0; i < player_count; ++i)
+		{
+			client_connection* client = ready_clients[i];
+			client->state = client_state::playing;
+
+			server_player& player = game_state.players[i];
+			player.connection = client;
+			player.name = std::string(client->last_message.player_name);
+		}
+
+		// Sort players based on name so we can give consistent ids for given names
+		std::sort(game_state.players.begin(), game_state.players.end(),
+			[](const server_player& lhs, const server_player& rhs)
+			{
+				return lhs.name < rhs.name;
+			}
+		);
+
+		std::vector<std::string> player_names(player_count);
+		for (size_t i = 0; i < player_count; ++i)
+		{
+			server_player& player = game_state.players[i];
+			player.player_id = static_cast<std::uint8_t>(i);
+
+			player_names[i] = player.name;
+		}
+
+		// Use exact specified order/algorithm from the assignment
+		game_state.game_id = rand_gen.next();
+
+		generate_event(std::make_unique<new_game>(game_state.map.width, game_state.map.height,
+			player_names));
+
+		for (auto& player : game_state.players)
+		{
+			player.x = (rand_gen.next() % game_state.map.width) + 0.5f; // TODO: Verify if width == maxx
+			player.x = (rand_gen.next() % game_state.map.height) + 0.5f; // ^ for height
+			player.turn_direction = static_cast<std::uint8_t>(rand_gen.next() % 360);
+
+			if (game_state.map.is_occupied(player.x, player.y))
+				generate_event(std::make_unique<player_eliminated>(player.player_id));
+			else
+			{
+				const auto pos = map::make_pos(player.x, player.y);
+				generate_event(std::make_unique<pixel>(player.player_id, pos.first, pos.second));
+			}
+		}
+	}
+
+	return true;
+}
+
 void handle_client_message(const client_message& msg, const struct sockaddr_in6& sock)
 {
-	auto option_it = find_player(sock);
-	const bool player_found = option_it.second;
+	const bool wants_to_spectate = (strlen(msg.player_name) == 0);
 
-	if (player_found)
+	auto it = game_state.clients.find(sock);
+	if (it != game_state.clients.end())
 	{
-		const auto& player = option_it.first->second;
+		auto& client = it->second;
 
-		const auto cur_session_id = player.last_message.session_id;
+		const auto cur_session_id = client.last_message.session_id;
 		// Ignore incoming messages for existing client with lower session_id
 		if (msg.session_id < cur_session_id)
 			return;
@@ -305,53 +352,72 @@ void handle_client_message(const client_message& msg, const struct sockaddr_in6&
 		// existing one and replace with the new one
 		else if (msg.session_id > cur_session_id)
 		{
-
-			game_state.spectators_or_waiting[sock] = player;
-			//game_state.active_players
-			// TODO: Implement me
-
+			client.ready_to_play = false;
+			client.player = nullptr; // disconnect from the player in case he's playing now
+			client.state = wants_to_spectate ? client_state::spectating : client_state::waiting;
 		}
 	}
-
-	// Handle player spectator<>active movement
-	if (game_state.in_progress == false) {
-
-	}
-	player_connection player;
-	player.socket = sock;
-	// Empty player name means it's only a spectator
-	if (strlen(msg.player_name) == 0)
+	// New client joined
+	else
 	{
+		client_connection client;
+		client.socket = sock;	
+		client.state = wants_to_spectate ? client_state::spectating : client_state::waiting;
 
+		it = game_state.clients.emplace(sock, client).first;
 	}
-	// TODO:
+	// Update last message and timestamp
+	client_connection& client = it->second;
+	client.last_message = msg;
+	client.last_message_time = current_time_ms();
+
+	// Handle possible game state change
+	if (wants_to_spectate)
+	{
+		client.ready_to_play = false;
+		client.player = nullptr;
+		client.state = client_state::spectating;
+	}
+	else if (client.is_playing())
+	{
+		client.player->turn_direction = msg.turn_direction;
+	}
+	// Wants to play but doesn't yet
+	else if (!game_state.in_progress && msg.turn_direction != 0)
+	{
+		client.ready_to_play = true;
+
+		// If we managed to start a game, we generated NEW_GAME and sent appropriate
+		// events to all other players; don't do it now
+		if (try_start_game())
+			return;
+	}
+
+	// TODO: Send series of messeges up to next_expected_event
 }
 
 void do_game_tick()
 {
-	for (size_t i = 0; i < game_state.playing_players.size(); ++i)
+	for (auto& player : game_state.players)
 	{
-		auto& player = *game_state.playing_players[i];
-		std::uint8_t player_num = static_cast<std::uint8_t>(i);
+		player.rotation += player.turn_direction * configuration.turning_speed;
+		player.rotation = fmod(player.rotation, 360);
 
-		player.transform.rotation += player.last_message.turn_direction * configuration.turning_speed;
-		player.transform.rotation = fmod(player.transform.rotation, 360);
-
-		auto old_pos = map::make_pos(player.transform.x, player.transform.y);
+		auto old_pos = map::make_pos(player.x, player.y);
 		// Rotation are degrees going clock-wise, so negate deg for (cos deg, sin deg) unit vector
 		// Move by a unit in given direction
-		player.transform.x += cos(-player.transform.rotation * M_PI / 180);
-		player.transform.y += sin(-player.transform.rotation * M_PI / 180);
+		player.x += cos(-player.rotation * M_PI / 180);
+		player.y += sin(-player.rotation * M_PI / 180);
 
-		auto new_pos = map::make_pos(player.transform.x, player.transform.y);
+		auto new_pos = map::make_pos(player.x, player.y);
 
 		if (old_pos == new_pos)
 			continue;
 
 		if (!game_state.map.is_inside(new_pos) || game_state.map.is_occupied(new_pos))
-			generate_event(std::make_unique<player_eliminated>(player_num));
+			generate_event(std::make_unique<player_eliminated>(player.player_id));
 		else
-			generate_event(std::make_unique<pixel>(player_num, new_pos.first, new_pos.second));
+			generate_event(std::make_unique<pixel>(player.player_id, new_pos.first, new_pos.second));
 	}
 }
 

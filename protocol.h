@@ -31,6 +31,8 @@ struct event
 	virtual std::vector<std::uint8_t> as_stream() const;
 	// Overridable for extending subclasses
 	virtual std::vector<std::uint8_t> aux_as_stream() const;
+
+	static std::unique_ptr<event> parse(const char* buf, size_t len);
 };
 
 struct new_game : public event

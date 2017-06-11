@@ -8,6 +8,7 @@
 #include <memory>
 #include <iterator>
 #include <utility>
+#include <cassert>
 
 #ifdef _WIN32
 #pragma comment(lib, "Ws2_32.lib")
@@ -23,6 +24,28 @@
 
 namespace
 {
+	inline std::uint64_t hton(std::uint64_t val) { return htonll(val); }
+	inline std::uint32_t hton(std::uint32_t val) { return htonl(val); }
+	inline std::uint16_t hton(std::uint16_t val) { return htons(val); }
+	inline std::uint8_t hton(std::uint8_t val) { return val; }
+
+	inline std::uint64_t ntoh(std::uint64_t val) { return ntohll(val); }
+	inline std::uint32_t ntoh(std::uint32_t val) { return ntohl(val); }
+	inline std::uint16_t ntoh(std::uint16_t val) { return ntohs(val); }
+	inline std::uint8_t ntoh(std::uint8_t val) { return val; }
+
+	template<typename T>
+	bool consume_bytes(const std::uint8_t* stream, size_t len, const std::uint8_t*& pointer, T& destination)
+	{
+		assert(pointer >= stream && pointer < stream + len);
+		// Not enough data in the stream
+		if (pointer + sizeof(T) > stream + len)
+			return false;
+
+		destination = ntoh(*static_cast<const T*>(pointer));
+		return true;
+	}
+
 	template<typename T>
 	auto as_bytes(const T& data)
 	{
@@ -77,6 +100,30 @@ std::vector<std::uint8_t> event::aux_as_stream() const
 	return {};
 }
 
+/* static */
+std::unique_ptr<event> parse(const char* buf, size_t buf_len)
+{
+	const std::uint8_t* stream = reinterpret_cast<const std::uint8_t*>(buf);
+	const std::uint8_t* pointer = stream;
+
+	std::uint32_t len;
+	if (!consume_bytes(stream, buf_len, pointer, len))
+		return nullptr;
+
+	event_type_t event_type;
+	if (!consume_bytes(stream, buf_len, pointer, event_type))
+		return nullptr;
+
+	std::uint32_t event_no;
+	if (!consume_bytes(stream, buf_len, pointer, event_no))
+		return nullptr;
+	//std::uint32_t len; // sizeof(event_* members data)
+	//const event_type_t event_type;
+	//std::uint32_t event_no; // consecutive values for each game session,
+	//std::uint32_t crc32; // crc checksum from len to, including, event_type
+
+	return nullptr;
+}
 
 new_game::new_game(std::uint32_t width, std::uint32_t height,
 	const std::vector<std::string>& names)

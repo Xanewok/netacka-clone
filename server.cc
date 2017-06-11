@@ -92,17 +92,17 @@ struct player_connection {
 struct in6_compare
 {
 	template<size_t off>
-	std::uint64_t addr_part(const sockaddr_in6& addr)
+	static std::uint64_t addr_part(const sockaddr_in6& addr)
 	{
 		return *reinterpret_cast<const std::uint64_t*>(addr.sin6_addr.s6_addr[off]);
 	}
 
-	auto as_tuple(const sockaddr_in6& sock)
+	static auto as_tuple(const sockaddr_in6& sock)
 	{
 		return std::make_tuple(addr_part<0>(sock), addr_part<4>(sock), sock.sin6_port);
 	}
 
-	bool operator() (const sockaddr_in6& lhs, const sockaddr_in6& rhs)
+	bool operator()(const sockaddr_in6& lhs, const sockaddr_in6& rhs) const
 	{
 		return as_tuple(lhs) < as_tuple(rhs);
 	}
@@ -209,7 +209,7 @@ static int server_socket;
 
 void broadcast_event(struct event* event)
 {
-	auto buffer = event->as_stream();
+	const auto buffer = event->as_stream();
 
 	const std::array<const player_collection_t*, 2> players = {
 		&game_state.active_players, &game_state.spectators_or_waiting

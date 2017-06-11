@@ -64,15 +64,15 @@ static struct {
 	std::uint32_t width = 800;
 	std::uint32_t height = 600;
 	std::uint16_t port_num = 12345;
-	int rounds_per_sec = 50;
-	int turning_speed = 6;
-	std::int64_t rand_seed;
+	std::uint32_t rounds_per_sec = 50;
+	std::uint32_t turning_speed = 6;
+	std::uint32_t rand_seed;
 	bool seed_provided = false;
 } configuration;
 
-static std::uint64_t get_round_time_ms()
+static float get_cached_round_time_ms()
 {
-	static std::uint64_t round_time = 1000 / (float)configuration.rounds_per_sec;
+	static float round_time = 1000.f / configuration.rounds_per_sec;
 	return round_time;
 }
 
@@ -122,7 +122,6 @@ struct server_player : public player
 	std::uint8_t turn_direction = 0;
 	client_connection* connection = nullptr;
 };
-
 
 // Helper struct that allows to compare sockaddr_in6 structures and also to
 // convert them to comparable tuples (pair of (addr, port) identifies the struct)
@@ -448,30 +447,44 @@ int main(int argc, char* argv[])
 		{
 		case 'W':
 		{
-			configuration.width = util::parse_bounded(argv[i + 1], 0, std::numeric_limits<std::uint32_t>::max());
+			configuration.width = static_cast<std::uint32_t>(
+				util::parse_bounded(argv[i + 1],
+				0, std::numeric_limits<std::uint32_t>::max()));
 			break;
 		}
 		case 'H':
 		{
-			configuration.height = util::parse_bounded(argv[i + 1], 0, std::numeric_limits<std::uint32_t>::max());
+			configuration.height = static_cast<std::uint32_t>(
+				util::parse_bounded(argv[i + 1],
+				0, std::numeric_limits<std::uint32_t>::max()));
 			break;
 		}
-		case 'p': configuration.port_num = util::parse_bounded(argv[i + 1], 0, 65535); break;
+		case 'p':
+		{
+			configuration.port_num = static_cast<std::uint16_t>(
+				util::parse_bounded(argv[i + 1], 0, 65535));
+			break;
+		}
 		case 's':
 		{
-			configuration.rounds_per_sec = util::parse_bounded(argv[i + 1], 1, std::numeric_limits<int>::max());
+			configuration.rounds_per_sec = static_cast<std::uint32_t>(
+				util::parse_bounded(argv[i + 1],
+				1, std::numeric_limits<int>::max()));
 			break;
 		}
 		case 't':
 		{
-			configuration.turning_speed = util::parse_bounded(argv[i + 1], 0, std::numeric_limits<int>::max());
+			configuration.turning_speed = static_cast<std::uint32_t>(
+				util::parse_bounded(argv[i + 1],
+				0, std::numeric_limits<int>::max()));
 			break;
 		}
 		case 'r':
 		{
-			configuration.rand_seed = util::parse_bounded(argv[i + 1],
-				std::numeric_limits<std::int64_t>::min(),
-				std::numeric_limits<std::int64_t>::max());
+			configuration.rand_seed = static_cast<std::uint32_t>(
+				util::parse_bounded(argv[i + 1],
+				std::numeric_limits<std::uint32_t>::min(),
+				std::numeric_limits<std::uint32_t>::max()));
 			configuration.seed_provided = true;
 			break;
 		}
@@ -486,7 +499,9 @@ int main(int argc, char* argv[])
 	game_state.map = map(configuration.width, configuration.height);
 
 	// Initialize deterministic random generator
-	rand_gen = Rand(configuration.seed_provided ? configuration.rand_seed : time(nullptr));
+	rand_gen = Rand(configuration.seed_provided
+		? configuration.rand_seed
+		: static_cast<std::uint32_t>(time(nullptr)));
 
 	// Initialized IPv6 UPD socket for client-connection
 	server_socket = socket(AF_INET6, SOCK_DGRAM, 0);

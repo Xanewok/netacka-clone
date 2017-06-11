@@ -4,10 +4,10 @@
 
 class Rand
 {
-	std::int64_t m_value;
+	std::uint32_t m_value;
 public:
 	Rand();
-	Rand(std::int64_t seed) : m_value(seed) {}
-	std::int64_t next();
+	Rand(std::uint32_t seed) : m_value(seed) {}
+	std::uint32_t next();
 };
 

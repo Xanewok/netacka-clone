@@ -18,6 +18,7 @@
 #define _BSD_SOURCE
 #include <endian.h> // TODO: Verify
 #define htonll htobe64
+#define ntohll be64toh
 #endif
 
 namespace
@@ -202,11 +203,11 @@ std::pair<client_message, bool> client_message::from(const char* stream, size_t 
 
 	client_message msg;
 
-	msg.session_id = be64toh(*reinterpret_cast<const std::uint64_t*>(stream));
+	msg.session_id = ntohll(*reinterpret_cast<const std::uint64_t*>(stream));
 	stream += sizeof(msg.session_id);
 	msg.turn_direction = *stream;
 	stream += sizeof(msg.turn_direction);
-	msg.next_expected_event = be32toh(*reinterpret_cast<const std::uint32_t*>(stream));
+	msg.next_expected_event = ntohl(*reinterpret_cast<const std::uint32_t*>(stream));
 	stream += sizeof(msg.next_expected_event);
 
 	for (size_t i = 0; i < sizeof(msg.player_name); ++i)

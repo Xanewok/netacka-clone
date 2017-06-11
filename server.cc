@@ -1,3 +1,5 @@
+#define _USE_MATH_DEFINES
+#include <cmath>
 #include <cstring>
 #include <cstdint>
 #include <cstdlib>
@@ -10,14 +12,24 @@
 #include <map>
 #include <memory>
 #include <chrono>
-#define _USE_MATH_DEFINES
-#include <cmath>
 #include <algorithm>
 #include <array>
 
-#include <sys/socket.h>
+#ifdef _WIN32
+#define NOMINMAX
+#pragma comment(lib, "Ws2_32.lib")
+#include <WinSock2.h> // endianness helpers
+#include <ws2ipdef.h>
+#include <ws2tcpip.h>
+using ssize_t = SSIZE_T;
+#else
+#include <arpa/inet.h>
 #include <sys/types.h>
+#include <sys/socket.h>
 #include <netinet/in.h>
+#define _BSD_SOURCE
+#include <endian.h> // TODO: Verify
+#endif
 
 #include "protocol.h"
 #include "util.h"
@@ -221,7 +233,7 @@ void broadcast_event(struct event* event)
 		{
 			const sockaddr_in6& client_address = kv.first;
 
-			ssize_t snd_len = sendto(server_socket, buffer.data(), buffer.size(), 0,
+			ssize_t snd_len = sendto(server_socket, (const char*)buffer.data(), buffer.size(), 0,
 				(sockaddr*) &client_address, sizeof(client_address));
 
 			if (snd_len != static_cast<ssize_t>(buffer.size()))
@@ -293,7 +305,7 @@ void handle_client_message(const client_message& msg, const struct sockaddr_in6&
 		{
 
 			game_state.spectators_or_waiting[sock] = player;
-			game_state.active_players
+			//game_state.active_players
 			// TODO: Implement me
 
 		}
@@ -414,7 +426,7 @@ int main(int argc, char* argv[])
 
 	// Disable IPv6-only option for sockets
 	int no = 0;
-	setsockopt(server_socket, IPPROTO_IPV6, IPV6_V6ONLY, (void *)&no, sizeof(no));
+	setsockopt(server_socket, IPPROTO_IPV6, IPV6_V6ONLY, (const char*)&no, sizeof(no));
 
 	struct sockaddr_in6 server_address;
 	server_address.sin6_family = AF_INET6;

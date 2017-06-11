@@ -359,6 +359,16 @@ void handle_client_message(const client_message& msg, const struct sockaddr_in6&
 	// New client joined
 	else
 	{
+		it = std::find_if(game_state.clients.begin(), game_state.clients.end(),
+			[&msg](const auto& client_kv)
+			{
+				return strcmp(client_kv.second.last_message.player_name, msg.player_name) == 0;
+			}
+		);
+		// Ignore messages from unknown socket with the same name as existing client (incl. spectators)
+		if (it != game_state.clients.end())
+			return;
+
 		client_connection client;
 		client.socket = sock;	
 		client.state = wants_to_spectate ? client_state::spectating : client_state::waiting;

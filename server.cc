@@ -221,6 +221,51 @@ void broadcast_event(struct event* event)
 	}
 }
 
+// Returns how many events were sent to client
+int broadcast_events(const client_connection& client, size_t max_send_count = 5)
+{
+	const auto next_expected = client.last_message.next_expected_event;
+	const auto event_count = game_state.events.size();
+	if (next_expected > event_count)
+		return 0;
+
+	auto send_count = std::min(event_count - next_expected, max_send_count);
+	if (send_count == 0)
+		return 0;
+
+	size_t sent = 0;
+	while (sent < send_count)
+	{
+		server_message msg;
+		msg.game_id = game_state.game_id;
+
+		// Try to split and pack requested events into different server_messages
+		// respecting maximum size of events packet data payload
+		int events_size = 0;
+		for (; sent < send_count; ++sent)
+		{
+			const event& event = *game_state.events[next_expected + sent];
+			const auto event_length = event.calculate_total_len_with_crc32();
+
+			if (events_size + event_length > server_message::MAX_EVENTS_LEN)
+				break;
+			else
+				events_size += event_length;
+		}
+
+		const auto buffer = msg.as_stream();
+
+		const sockaddr_in6& client_address = client.socket;
+		ssize_t snd_len = sendto(server_socket, (const char*)buffer.data(), buffer.size(), 0,
+			(sockaddr*)&client_address, sizeof(client_address));
+
+		if (snd_len != static_cast<ssize_t>(buffer.size()))
+			fprintf(stderr, "Error sending event: %s\n", buffer.data());
+	}
+
+	return sent;
+}
+
 void generate_event(std::unique_ptr<event> event)
 {
 	// First broadcast the event

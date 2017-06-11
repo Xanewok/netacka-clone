@@ -27,6 +27,8 @@ struct server_message
 	std::vector<event*> events;
 
 	constexpr static int HEADER_LEN = sizeof(server_message::game_id);
+	constexpr static int MAX_EVENTS_LEN = MAX_EVENT_PACKET_DATA_SIZE
+		- sizeof(server_message::game_id);
 
 	std::vector<std::uint8_t> as_stream() const;
 };
@@ -56,6 +58,7 @@ struct event
 	virtual ~event() = default;
 
 	virtual std::uint32_t calculate_len() const;
+	std::uint32_t calculate_total_len_with_crc32() const;
 	virtual std::vector<std::uint8_t> as_stream() const;
 	// Overridable for extending subclasses
 	virtual std::vector<std::uint8_t> aux_as_stream() const;

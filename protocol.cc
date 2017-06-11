@@ -84,6 +84,11 @@ std::uint32_t event::calculate_len() const
 	return sizeof(event_type) + sizeof(event_no); // + sizeof(event_data) in subclasses
 }
 
+std::uint32_t event::calculate_total_len_with_crc32() const
+{
+	return calculate_len() + sizeof(crc32);
+}
+
 std::vector<std::uint8_t> event::as_stream() const
 {
 	std::vector<std::uint8_t> stream;

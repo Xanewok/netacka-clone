@@ -255,11 +255,17 @@ int broadcast_events(const client_connection& client, size_t max_send_count = 5)
 
 		const auto buffer = msg.as_stream();
 
+		int flags = 0;
+#ifdef linux
+		flags = MSG_DONTWAIT;
+#endif
 		const sockaddr_in6& client_address = client.socket;
-		ssize_t snd_len = sendto(server_socket, (const char*)buffer.data(), buffer.size(), 0,
+		ssize_t snd_len = sendto(server_socket, (const char*)buffer.data(), buffer.size(), flags,
 			(sockaddr*)&client_address, sizeof(client_address));
 
-		if (snd_len != static_cast<ssize_t>(buffer.size()))
+		const bool would_block = errno == EAGAIN || errno == EWOULDBLOCK;
+
+		if (!would_block && snd_len != static_cast<ssize_t>(buffer.size()))
 			fprintf(stderr, "Error sending event: %s\n", buffer.data());
 	}
 

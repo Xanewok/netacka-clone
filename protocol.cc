@@ -63,9 +63,16 @@ namespace
 		stream.insert(stream.end(), str, str + strlen(str));
 	}
 
-	std::uint32_t calculate_crc(const std::vector<std::uint8_t> stream)
+	std::unique_ptr<event> create_event(event_type_t event_type)
 	{
-		return xcrc32(stream.data(), stream.size(), 0);
+		switch (event_type)
+		{
+		case NEW_GAME: return std::make_unique<new_game>();
+		case PLAYER_ELIMINATED: return std::make_unique<player_eliminated>();
+		case PIXEL: return std::make_unique<pixel>();
+		case GAME_OVER: return std::make_unique<game_over>();
+		default: return nullptr;
+		}
 	}
 }
 
@@ -88,7 +95,7 @@ std::vector<std::uint8_t> event::as_stream() const
 	const auto& aux_data = aux_as_stream();
 	stream.insert(stream.end(), aux_data.begin(), aux_data.end());
 
-	auto crc = calculate_crc(stream);
+	auto crc =	xcrc32(stream.data(), stream.size(), 0);
 	append_bytes(stream, as_bytes(htonl(crc)));
 
 	stream.shrink_to_fit();
@@ -110,6 +117,10 @@ std::unique_ptr<event> parse(const char* buf, size_t buf_len)
 	if (!consume_bytes(stream, buf_len, pointer, len))
 		return nullptr;
 
+	// Received message length and parsed len do not match - invalid message 
+	if (len != buf_len - sizeof(event::len) - sizeof(event::crc32))
+		return nullptr;
+
 	std::uint8_t event_type;
 	if (!consume_bytes(stream, buf_len, pointer, event_type))
 		return nullptr;
@@ -117,14 +128,44 @@ std::unique_ptr<event> parse(const char* buf, size_t buf_len)
 	std::uint32_t event_no;
 	if (!consume_bytes(stream, buf_len, pointer, event_no))
 		return nullptr;
-	//std::uint32_t len; // sizeof(event_* members data)
-	//const event_type_t event_type;
-	//std::uint32_t event_no; // consecutive values for each game session,
-	//std::uint32_t crc32; // crc checksum from len to, including, event_type
 
-	return nullptr;
+	auto event = create_event(static_cast<event_type_t>(event_type));
+	// Parsed event type is invalid or couldn't create event
+	if (event == nullptr)
+		return nullptr;
+	
+	event->len = len;
+	event->event_no;
+
+	pointer = event->parse_event_data(pointer, len - event::HEADER_LEN - sizeof(event::crc32));
+	// Could not succesfully parse event_data depending on event type
+	if (pointer == nullptr)
+		return nullptr;
+
+	if (!consume_bytes(stream, buf_len, pointer, event->crc32))
+		return nullptr;
+
+	auto byte_buf = reinterpret_cast<const std::uint8_t*>(buf); 
+	// Received message is larger than can't be parsed - incorrect message
+	if (pointer != byte_buf + buf_len)
+		return nullptr;
+
+	// CRC checksum mismatch
+	auto crc = xcrc32(byte_buf, buf_len - sizeof(event::crc32), 0);
+	if (crc != event->crc32)
+		return nullptr;
+
+	// Data was exact, event could be created and crc matches - we're good to go
+	return event;
 }
 
+const uint8_t* event::parse_event_data(const uint8_t* buf, size_t len)
+{
+	// Bare event doesn't contain any extra info
+	return buf;
+}
+
+new_game::new_game() : event(NEW_GAME) {}
 new_game::new_game(std::uint32_t width, std::uint32_t height,
 	const std::vector<std::string>& names)
 : event(NEW_GAME)
@@ -160,7 +201,33 @@ std::vector<std::uint8_t> new_game::aux_as_stream() const
 	return stream;
 }
 
+const uint8_t* new_game::parse_event_data(const uint8_t* buf, size_t len)
+{
+	const uint8_t* pointer = buf;
+	if (!consume_bytes(buf, len, pointer, this->maxx)) return nullptr;
+	if (!consume_bytes(buf, len, pointer, this->maxy)) return nullptr;
 
+	std::vector<std::string> names;
+	while (pointer < buf + len)
+	{
+		const char* str = reinterpret_cast<const char*>(pointer);
+		int name_len = strlen(str);
+		// Invalid name length
+		if (name_len <= 0 || name_len > 64)
+			return nullptr;
+		const std::uint8_t* name_end = pointer + name_len;
+		// Name extends message length or isn't 0-separated
+		if (name_end >= buf + len || *name_end != '\0')
+			return nullptr;
+
+		names.push_back(std::string(str));
+		pointer += name_len + sizeof('\0');
+	}
+
+	return pointer;
+}
+
+pixel::pixel() : event(PIXEL) {}
 pixel::pixel(std::uint8_t player, std::uint32_t px, std::uint32_t py)
 : event(PIXEL)
 , player_number(player)
@@ -187,6 +254,17 @@ std::vector<std::uint8_t> pixel::aux_as_stream() const
 	return stream;
 }
 
+const uint8_t* pixel::parse_event_data(const uint8_t* buf, size_t len)
+{
+	const uint8_t* pointer = buf;
+	if (!consume_bytes(buf, len, pointer, this->player_number)) return nullptr;
+	if (!consume_bytes(buf, len, pointer, this->x)) return nullptr;
+	if (!consume_bytes(buf, len, pointer, this->y)) return nullptr;
+	
+	return pointer;
+}
+
+player_eliminated::player_eliminated() : event(PLAYER_ELIMINATED) {}
 player_eliminated::player_eliminated(std::uint8_t player)
 : event(PLAYER_ELIMINATED)
 , player_number(player)
@@ -204,6 +282,14 @@ std::vector<std::uint8_t> player_eliminated::aux_as_stream() const
 	std::vector<std::uint8_t> stream;
 	stream.push_back(player_number);
 	return stream;
+}
+
+const uint8_t* player_eliminated::parse_event_data(const uint8_t* buf, size_t len)
+{
+	const uint8_t* pointer = buf;
+	if (!consume_bytes(buf, len, pointer, this->player_number)) return nullptr;
+
+	return pointer;
 }
 
 game_over::game_over() : event(GAME_OVER) {}

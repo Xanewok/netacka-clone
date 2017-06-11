@@ -42,7 +42,7 @@ namespace
 		if (pointer + sizeof(T) > stream + len)
 			return false;
 
-		destination = ntoh(*static_cast<const T*>(pointer));
+		destination = ntoh(*reinterpret_cast<const T*>(pointer));
 		return true;
 	}
 
@@ -110,7 +110,7 @@ std::unique_ptr<event> parse(const char* buf, size_t buf_len)
 	if (!consume_bytes(stream, buf_len, pointer, len))
 		return nullptr;
 
-	event_type_t event_type;
+	std::uint8_t event_type;
 	if (!consume_bytes(stream, buf_len, pointer, event_type))
 		return nullptr;
 

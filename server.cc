@@ -50,6 +50,7 @@ constexpr const char* usage_msg =
 "          TURNING_SPEED, domyślnie 6)\n"
 "  -r n – ziarno generatora liczb losowych (opisanego poniżej)\n";
 
+constexpr int MAX_CLIENTS = 42;
 constexpr std::chrono::milliseconds CLIENT_CONNECTION_TIMEOUT = 2000ms;
 
 std::chrono::milliseconds current_time_ms()
@@ -90,6 +91,7 @@ struct client_connection {
 
 	client_message last_message;
 	std::chrono::milliseconds last_message_time;
+	constexpr static std::chrono::milliseconds MIN_MESSAGE_DELAY { 2 };
 
 	server_player* player = nullptr;
 
@@ -422,10 +424,19 @@ void handle_client_message(const client_message& msg, const struct sockaddr_in6&
 			client.player = nullptr; // disconnect from the player in case he's playing now
 			client.state = wants_to_spectate ? client_state::spectating : client_state::waiting;
 		}
+		// Existing client tries to flood us, ignore it
+		else if (current_time_ms() - client.last_message_time < client_connection::MIN_MESSAGE_DELAY)
+		{
+			return;
+		}
 	}
 	// New client joined
 	else
 	{
+		// Respect limit of connected clients
+		if (game_state.clients.size() >= MAX_CLIENTS)
+			return;
+
 		it = std::find_if(game_state.clients.begin(), game_state.clients.end(),
 			[&msg](const auto& client_kv)
 			{

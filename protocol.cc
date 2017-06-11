@@ -28,11 +28,13 @@ namespace
 	inline std::uint32_t hton(std::uint32_t val) { return htonl(val); }
 	inline std::uint16_t hton(std::uint16_t val) { return htons(val); }
 	inline std::uint8_t hton(std::uint8_t val) { return val; }
+	inline std::int8_t hton(std::int8_t val) { return val; }
 
 	inline std::uint64_t ntoh(std::uint64_t val) { return ntohll(val); }
 	inline std::uint32_t ntoh(std::uint32_t val) { return ntohl(val); }
 	inline std::uint16_t ntoh(std::uint16_t val) { return ntohs(val); }
 	inline std::uint8_t ntoh(std::uint8_t val) { return val; }
+	inline std::int8_t ntoh(std::int8_t val) { return val; }
 
 	template<typename T>
 	bool consume_bytes(const std::uint8_t* stream, size_t len, const std::uint8_t*& pointer, T& destination)
@@ -335,23 +337,25 @@ std::vector<std::uint8_t> server_message::as_stream() const
 /* static */
 std::pair<client_message, bool> client_message::from(const char* stream, size_t len)
 {
-	if (len <= sizeof(client_message::session_id) + sizeof(client_message::turn_direction)
-		+ sizeof(client_message::next_expected_event) + sizeof('\0'))
+	constexpr int MIN_MESSAGE_LEN = sizeof(client_message::session_id)
+		+ sizeof(client_message::turn_direction)
+		+ sizeof(client_message::next_expected_event) + sizeof('\0');
+
+	if (len <= MIN_MESSAGE_LEN)
 		return std::make_pair(client_message(), false);
 
 	client_message msg;
 
-	msg.session_id = ntohll(*reinterpret_cast<const std::uint64_t*>(stream));
-	stream += sizeof(msg.session_id);
-	msg.turn_direction = *stream;
-	stream += sizeof(msg.turn_direction);
-	msg.next_expected_event = ntohl(*reinterpret_cast<const std::uint32_t*>(stream));
-	stream += sizeof(msg.next_expected_event);
+	const uint8_t* data = reinterpret_cast<const std::uint8_t*>(stream);
+	const uint8_t* pointer = data;
+	consume_bytes(data, len, pointer, msg.session_id);
+	consume_bytes(data, len, pointer, msg.turn_direction);
+	consume_bytes(data, len, pointer, msg.next_expected_event);
 
 	for (size_t i = 0; i < sizeof(msg.player_name); ++i)
 	{
-		msg.player_name[i] = stream[i];
-		if (stream[i] == '\0')
+		msg.player_name[i] = pointer[i];
+		if (pointer[i] == '\0')
 			break;
 	}
 

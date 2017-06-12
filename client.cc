@@ -37,8 +37,6 @@ using ssize_t = SSIZE_T;
 #include "rand.h"
 #include "map.h"
 
-#define BUFFER_SIZE 1000
-
 constexpr const char* usage_msg =
 "USAGE:  ./siktacka-client player_name game_server_host[:port] [ui_server_host[:port]]\n"
 "  player_name – 0-64 drukowalne znaki ASCII (bez spacji, \"\" oznacza obserwatora\n"
@@ -47,15 +45,25 @@ constexpr const char* usage_msg =
 "  ui_server_host   - nazwa serwera interfejsu u¿ytkownika (domyœlnie localhost)\n"
 "  ui_server_port   - port serwera interfejsu u¿ytkownika (domyœlnie 12346)\n";
 
+struct server_connection {
+	int socket;
+	int family;
+	int protocol;
+	int desired_socktype;
+	std::string hostname;
+	std::uint16_t port;
+};
+
+static server_connection servers[2] = {
+	{ 0, 0, 0, SOCK_DGRAM, "", 12345 }, // game server
+	{ 0, 0, 0, SOCK_STREAM, "localhost", 123456 } // ui server
+};
+
+static server_connection& game_server = servers[0];
+static server_connection& gui_server = servers[1];
+
 static std::uint64_t session_id;
 static std::string player_name;
-
-static struct {
-	std::string game_server_host;
-	std::uint16_t game_server_port = 12345;
-	std::string ui_server_host = "localhost";
-	std::uint16_t ui_server_port = 12346;
-} configuration;
 
 namespace {
 	template<typename T>
@@ -112,20 +120,20 @@ int main(int argc, const char* argv[])
 		player_name = "";
 
 	// Split to get optional port, server host will be validated later with getaddrinfo()
-	auto game_server = split_hostname(argv[2]);
-	configuration.game_server_host = std::get<0>(game_server);
-	if (std::get<1>(game_server))
+	auto server_address = split_hostname(argv[2]);
+	game_server.hostname = std::get<0>(server_address);
+	if (std::get<1>(server_address))
 	{
-		configuration.game_server_port = parse<std::uint16_t>(std::get<2>(game_server).data(), 0, 65535);
+		game_server.port = parse<std::uint16_t>(std::get<2>(server_address).data(), 0, 65535);
 	}
 	// Ditto optionally for ui server hostname
 	if (argc >= 4)
 	{
-		auto ui_server = split_hostname(argv[3]);
-		configuration.ui_server_host = std::get<0>(ui_server);
-		if (std::get<1>(ui_server))
+		auto server_address = split_hostname(argv[3]);
+		gui_server.hostname = std::get<0>(server_address);
+		if (std::get<1>(server_address))
 		{
-			configuration.ui_server_port = parse<std::uint16_t>(std::get<2>(ui_server).data(), 0, 65535);
+			gui_server.port = parse<std::uint16_t>(std::get<2>(server_address).data(), 0, 65535);
 		}
 	}
 
@@ -144,90 +152,57 @@ int main(int argc, const char* argv[])
 		printf("WSAStartup failed with error: %d\n", err);
 		return 1;
 	}
+#define close closesocket
 #endif
-
-	// TODO: Validate ui/server host names
-
-	struct addrinfo hints, *res, *res0;
-	memset(&hints, 0x00, sizeof(hints));
-	int error = getaddrinfo(argv[2], nullptr, nullptr, &res0);
-
-	int sock;
-	struct addrinfo addr_hints;
-	struct addrinfo *addr_result;
-
-	int i, flags, sflags;
-	char buffer[BUFFER_SIZE];
-	size_t len;
-	ssize_t snd_len, rcv_len;
-	struct sockaddr_in my_address;
-	struct sockaddr_in srvr_address;
-	socklen_t rcva_len;
-
-	const char* server_addr = "localhost";
-	const char* port = "12345";
-
-	// 'converting' host/port in string to struct addrinfo
-	(void)memset(&addr_hints, 0, sizeof(struct addrinfo));
-	addr_hints.ai_family = AF_INET; // IPv4
-	addr_hints.ai_socktype = SOCK_DGRAM;
-	addr_hints.ai_protocol = IPPROTO_UDP;
-	addr_hints.ai_flags = 0;
-	addr_hints.ai_addrlen = 0;
-	addr_hints.ai_addr = NULL;
-	addr_hints.ai_canonname = NULL;
-	addr_hints.ai_next = NULL;
-	if (getaddrinfo(server_addr, NULL, &addr_hints, &addr_result) != 0) {
-		util::fatal("getaddrinfo");
-	}
-
-	my_address.sin_family = AF_INET; // IPv4
-	my_address.sin_addr.s_addr =
-		((struct sockaddr_in*) (addr_result->ai_addr))->sin_addr.s_addr; // address IP
-	my_address.sin_port = htons((uint16_t)atoi(port)); // port from the command line
-
-	freeaddrinfo(addr_result);
-
-	sock = socket(PF_INET, SOCK_DGRAM, 0);
-	if (sock < 0)
-		util::fatal("socket");
-
-	memset(buffer, 0x00, BUFFER_SIZE);
-	client_message msg;
-	msg.session_id = 1234;
-	msg.turn_direction = 1;
-	msg.next_expected_event = 31337;
-	memcpy(msg.player_name, "Gowniak", strlen("Gowniak"));
-
-	auto stream = msg.as_stream();
-	memcpy(buffer, stream.data(), stream.size());
-
-	len = stream.size();
-
-	(void)printf("sending to socket: %s\n", buffer);
-	sflags = 0;
-	rcva_len = (socklen_t) sizeof(my_address);
-	snd_len = sendto(sock, buffer, len, sflags,
-		(struct sockaddr *) &my_address, rcva_len);
-
-	if (snd_len != (ssize_t)len) {
-		util::fatal("partial / failed write");
-	}
-
-	while (true)
+	
+	// Try to create sockets and connect via either IPv4 or IPv6 to game and ui server
+	for (auto& server : servers)
 	{
-		(void)memset(buffer, 0, sizeof(buffer));
-		flags = 0;
-		len = (size_t) sizeof(buffer) - 1;
-		rcva_len = (socklen_t) sizeof(srvr_address);
-		rcv_len = recvfrom(sock, buffer, len, flags,
-			(struct sockaddr *) &srvr_address, &rcva_len);
+		const auto port = std::to_string(server.port);
 
-		if (rcv_len < 0) {
-			util::fatal("read");
+		addrinfo hints, *res;
+		memset(&hints, 0x00, sizeof(hints));
+		hints.ai_socktype = server.desired_socktype;
+
+		int error = getaddrinfo(server.hostname.c_str(), port.c_str(), &hints, &res);
+		if (error != 0)
+			util::fatal("Couldn't resolve ", server.hostname.c_str());
+
+		addrinfo* p;
+		for (p = res; p != nullptr; p = p->ai_next)
+		{
+			auto& sock = server.socket;
+			if ((sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol) == -1))
+			{
+				perror("socket");
+				continue;
+			}
+
+			if (connect(sock, p->ai_addr, p->ai_addrlen) == -1)
+			{
+				perror("connect");
+				close(sock);
+				continue;
+			}
+
+			server.family = p->ai_family;
+			server.protocol = p->ai_protocol;
+			break;
 		}
-		(void)printf("read from socket: %zd bytes: %s\n", rcv_len, buffer);
+
+		if (p == nullptr)
+			util::fatal("Couldn't establish a connection to ", server.hostname.c_str());
+
+		freeaddrinfo(res);
 	}
+
+	// Turn off Nagle's algorithm for GUI TCP connection
+	int off = 1;
+	int result = setsockopt(gui_server.socket, IPPROTO_TCP, TCP_NODELAY, (const char*)&off, sizeof(off));
+	if (result < 0)
+		util::fatal("Couldn't turn off Nagle's algorithm");
+
+	// TODO: Implement server<>client and client<>GUI communication
 
 	return 0;
 }

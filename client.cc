@@ -400,13 +400,13 @@ int main(int argc, const char* argv[])
 
 		int error = getaddrinfo(server.hostname.c_str(), port.c_str(), &hints, &res);
 		if (error != 0)
-			util::fatal("Couldn't resolve ", server.hostname.c_str());
+			util::fatal("Couldn't resolve %s", server.hostname.c_str());
 
 		addrinfo* p;
 		for (p = res; p != nullptr; p = p->ai_next)
 		{
 			auto& sock = server.socket;
-			if ((sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol) == -1))
+			if ((sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1)
 			{
 				perror("socket");
 				continue;
@@ -427,7 +427,7 @@ int main(int argc, const char* argv[])
 		}
 
 		if (p == nullptr)
-			util::fatal("Couldn't establish a connection to ", server.hostname.c_str());
+			util::fatal("Couldn't establish a connection to %s", server.hostname.c_str());
 
 		freeaddrinfo(res);
 	}

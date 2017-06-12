@@ -96,12 +96,12 @@ enum client_state {
 
 struct server_player;
 
+constexpr static std::chrono::milliseconds MIN_MESSAGE_DELAY { 2 };
 struct client_connection {
 	sockaddr_in6 socket;
 
 	client_message last_message;
 	std::chrono::milliseconds last_message_time;
-	constexpr static std::chrono::milliseconds MIN_MESSAGE_DELAY { 2 };
 
 	server_player* player = nullptr;
 
@@ -416,7 +416,7 @@ void handle_client_message(const client_message& msg, const struct sockaddr_in6&
 			client.state = wants_to_spectate ? client_state::spectating : client_state::waiting;
 		}
 		// Existing client tries to flood us, ignore it
-		else if (current_time_ms() - client.last_message_time < client_connection::MIN_MESSAGE_DELAY)
+		else if (current_time_ms() - client.last_message_time < MIN_MESSAGE_DELAY)
 		{
 			return;
 		}

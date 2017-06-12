@@ -174,6 +174,8 @@ void receive_game_job()
 			{
 			case NEW_GAME:
 			{
+				game_id = msg.game_id;
+
 				new_game* new_game = static_cast<struct new_game*>(event.get());
 				active_player_names = new_game->player_names;
 				maxx = new_game->maxx;
@@ -201,7 +203,6 @@ void receive_game_job()
 				std::lock_guard<std::recursive_mutex> _lock(events_lock);
 
 				next_expected_event++;
-				// TODO: Add synchronization
 				queued_events.push_back(event);
 			}
 		}

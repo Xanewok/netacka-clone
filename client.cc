@@ -53,7 +53,7 @@ constexpr const char* usage_msg =
 
 struct server_connection {
 	int socket;
-	std::unique_ptr<sockaddr> addr = nullptr;
+	sockaddr_storage addr;
 	size_t addrlen = 0;
 	int family;
 	int protocol;
@@ -63,8 +63,8 @@ struct server_connection {
 };
 
 static server_connection servers[2] = {
-	{ 0, nullptr, 0, 0, 0, SOCK_DGRAM, "", (std::uint16_t)12345 }, // game server
-	{ 0, nullptr, 0, 0, 0, SOCK_STREAM, "localhost", (std::uint16_t)12346 } // ui server
+	{ 0, { 0 }, 0, 0, 0, SOCK_DGRAM, "", (std::uint16_t)12345 }, // game server
+	{ 0, { 0 }, 0, 0, 0, SOCK_STREAM, "localhost", (std::uint16_t)12346 } // ui server
 };
 
 static server_connection& game_server = servers[0];
@@ -141,9 +141,15 @@ void send_game_job()
 			const auto buffer = msg.as_stream();
 			// Send heartbeat to 
 			ssize_t snd_len = sendto(game_server.socket, (const char*)buffer.data(), buffer.size(), 0,
-				(sockaddr*)game_server.addr.get(), game_server.addrlen);
+				(sockaddr*)&game_server.addr, game_server.addrlen);
 			if ((size_t)snd_len != buffer.size())
+			{
+#ifdef _WIN32
+				fprintf(stderr, "socket: WSAGetLastError: %d\n", WSAGetLastError());
+#endif
+				fprintf(stderr, "errno: %d\n", errno);
 				util::fatal("Error sending heartbeat message to server");
+			}
 
 		}
 		auto elapsed = current_time_microseconds() - start_time;
@@ -165,8 +171,10 @@ void receive_game_job()
 		auto read_len = recv(game_server.socket, buffer, RECV_BUFFER_SIZE, 0);
 
 		auto pair = server_message::from(buffer, read_len);
-		if (pair.second == false)
+		if (pair.second == false) {
+			fprintf(stderr, "Game recv: Couldn't parse server message");
 			continue;
+		}
 
 		// Verify data from the server
 		const server_message& msg = pair.first;
@@ -268,9 +276,11 @@ void send_gui_job()
 			// TODO: Verify if we need GUI sockaddr for TCP connection
 			auto buf_len = strlen(buffer);
 			ssize_t snd_len = sendto(gui_server.socket, (const char*)buffer, strlen(buffer), 0,
-				(sockaddr*)gui_server.addr.get(), gui_server.addrlen);
+				(sockaddr*)&gui_server.addr, gui_server.addrlen);
 			if ((size_t)snd_len != buf_len)
 				util::fatal("Could not succesfully send all data to gui_server");
+
+			fprintf(stderr, "GUI send: %s\n", buffer);
 		}
 		queued_events.clear();
 	}
@@ -319,6 +329,7 @@ void receive_gui_job()
 					// Directly map messages to the keys and values (pair of LEFT/RIGHT and UP/DOWN)
 					if (strncmp(match_buffer, messages[i].first, messages[i].second) == 0)
 					{
+						fprintf(stderr, "GUI recv: %s\n", messages[i].first);
 						key_pressed[i / 2] = (i % 2);
 					}
 				}
@@ -419,7 +430,7 @@ int main(int argc, const char* argv[])
 				continue;
 			}
 
-			server.addr = std::make_unique<sockaddr>(*p->ai_addr);
+			memcpy(&server.addr, p->ai_addr, p->ai_addrlen);
 			server.addrlen = p->ai_addrlen;
 			server.family = p->ai_family;
 			server.protocol = p->ai_protocol;

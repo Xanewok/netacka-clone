@@ -169,6 +169,10 @@ void receive_game_job()
 	while (true)
 	{
 		auto read_len = recv(game_server.socket, buffer, RECV_BUFFER_SIZE, 0);
+		if (read_len == -1) {
+			fprintf(stderr, "Error reading message from game server\n");
+			std::exit(1);
+		}
 
 		auto pair = server_message::from(buffer, read_len);
 		if (pair.second == false) {
@@ -243,14 +247,16 @@ void send_gui_job()
 				auto cur_buf = buffer + strlen(buffer);
 				for (size_t i = 0; i < new_game->player_names.size(); ++i)
 				{
-					sprintf(cur_buf, "%s", cur_buf);
-					cur_buf += new_game->player_names[i].size();
+					const std::string& name = new_game->player_names[i];
+
+					sprintf(cur_buf, "%s", name.c_str());
+					cur_buf += name.size();
 					// Separate every player name but last
-					if (i + 1 < new_game->player_names.size())
-					{
+					const bool is_last = (i + 1 == new_game->player_names.size());
+					if (!is_last)
 						*(cur_buf++) = ' ';
-					}
 				}
+				// Every valid and complete message ends with \n
 				*cur_buf = '\n';
 
 				active_player_names = new_game->player_names;
@@ -280,7 +286,7 @@ void send_gui_job()
 			if ((size_t)snd_len != buf_len)
 				util::fatal("Could not succesfully send all data to gui_server");
 
-			fprintf(stderr, "GUI send: %s\n", buffer);
+			fprintf(stderr, "GUI send: %s", buffer);
 		}
 		queued_events.clear();
 	}

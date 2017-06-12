@@ -222,6 +222,8 @@ void cleanup_game()
 		{
 			client.state = client_state::waiting;
 			client.player = nullptr;
+
+			client.ready_to_play = false;
 		}
 	}
 	game_state.players.clear();
@@ -265,6 +267,9 @@ int broadcast_events(const std::vector<std::shared_ptr<event>>& events, std::uin
 		}
 
 		const auto buffer = msg.as_stream();
+		if (buffer.size() != sizeof(msg.game_id) + events_size) {
+			fprintf(stderr, "Mismatch between size of serialized and prepared server_message");
+		}
 
 		int flags = 0;
 #ifdef linux
@@ -286,7 +291,7 @@ int broadcast_events(const std::vector<std::shared_ptr<event>>& events, std::uin
 void generate_event(std::shared_ptr<event> event)
 {
 	// First broadcast the event
-	event->event_no = game_state.events.size() + 1;
+	event->event_no = game_state.events.size();
 	game_state.events.push_back(event);
 
 	auto raw_event = event.get();
@@ -355,7 +360,9 @@ bool try_start_game()
 	{
 		const auto player_count = ready_clients.size();
 
-		// Initialize 
+		// Initialize
+		game_state.in_progress = true;
+
 		game_state.players.resize(player_count);
 		for (size_t i = 0; i < player_count; ++i)
 		{
@@ -393,8 +400,8 @@ bool try_start_game()
 		for (auto& player : game_state.players)
 		{
 			player.x = (rand_gen.next() % game_state.map.width) + 0.5f; // TODO: Verify if width == maxx
-			player.x = (rand_gen.next() % game_state.map.height) + 0.5f; // ^ for height
-			player.turn_direction = static_cast<std::uint8_t>(rand_gen.next() % 360);
+			player.y = (rand_gen.next() % game_state.map.height) + 0.5f; // ^ for height
+			player.rotation = (rand_gen.next() % 360);
 
 			if (game_state.map.is_occupied(player.x, player.y))
 				generate_event(std::make_shared<player_eliminated>(player.player_id));
@@ -509,6 +516,11 @@ void do_game_tick()
 			generate_event(std::make_shared<player_eliminated>(player.player_id));
 		else
 			generate_event(std::make_shared<pixel>(player.player_id, new_pos.first, new_pos.second));
+
+		// After every player update we need to check if the game has finished
+		// if so, the players are invalid, so just exit the game
+		if (!game_state.in_progress)
+			break;
 	}
 }
 

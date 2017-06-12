@@ -603,6 +603,22 @@ namespace {
 			std::exit(1);
 		}
 	}
+
+	template<typename T>
+	T parse(const char* str, T min, T max)
+	{
+		T value;
+		try
+		{
+			value = static_cast<T>(util::parse_bounded(str, min, max));
+		}
+		catch (std::exception& e)
+		{
+			util::fatal("Invalid argument %s (%s)", str, e.what());
+			std::exit(1);
+		}
+		return value;
+	}
 } // namespace
 
 int main(int argc, char* argv[])
@@ -634,49 +650,42 @@ int main(int argc, char* argv[])
 			std::exit(1);
 		}
 
-		// TODO: Catch parsing error and exit with 1
 		switch (arg[1])
 		{
 		case 'W':
 		{
-			configuration.width = static_cast<std::uint32_t>(
-				util::parse_bounded(argv[i + 1],
-				1, std::numeric_limits<std::uint32_t>::max()));
+			configuration.width = parse<std::uint32_t>(argv[i + 1],
+				1, std::numeric_limits<std::uint32_t>::max());
 			break;
 		}
 		case 'H':
 		{
-			configuration.height = static_cast<std::uint32_t>(
-				util::parse_bounded(argv[i + 1],
-				1, std::numeric_limits<std::uint32_t>::max()));
+			configuration.height = parse<std::uint32_t>(argv[i + 1],
+				1, std::numeric_limits<std::uint32_t>::max());
 			break;
 		}
 		case 'p':
 		{
-			configuration.port_num = static_cast<std::uint16_t>(
-				util::parse_bounded(argv[i + 1], 0, 65535));
+			configuration.port_num = parse<std::uint16_t>(argv[i + 1], 0, 65535);
 			break;
 		}
 		case 's':
 		{
-			configuration.rounds_per_sec = static_cast<std::uint32_t>(
-				util::parse_bounded(argv[i + 1],
-				1, std::numeric_limits<int>::max()));
+			configuration.rounds_per_sec = parse<std::uint32_t>(argv[i + 1],
+				1, std::numeric_limits<uint32_t>::max());
 			break;
 		}
 		case 't':
 		{
-			configuration.turning_speed = static_cast<std::uint32_t>(
-				util::parse_bounded(argv[i + 1],
-				0, std::numeric_limits<int>::max()));
+			configuration.turning_speed = parse<std::uint32_t>(argv[i + 1],
+				0, std::numeric_limits<int>::max());
 			break;
 		}
 		case 'r':
 		{
-			configuration.rand_seed = static_cast<std::uint32_t>(
-				util::parse_bounded(argv[i + 1],
+			configuration.rand_seed = parse<std::uint32_t>(argv[i + 1],
 				std::numeric_limits<std::uint32_t>::min(),
-				std::numeric_limits<std::uint32_t>::max()));
+				std::numeric_limits<std::uint32_t>::max());
 			configuration.seed_provided = true;
 			break;
 		}

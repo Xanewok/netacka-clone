@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <array>
 #include <mutex>
+#include <thread>
 
 #ifdef _WIN32
 #define NOMINMAX

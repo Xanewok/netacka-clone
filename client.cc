@@ -29,6 +29,9 @@ using ssize_t = SSIZE_T;
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <netdb.h>
+#include <unistd.h>
 #define _BSD_SOURCE
 #include <endian.h>
 #endif
@@ -43,10 +46,10 @@ using namespace std::chrono;
 constexpr const char* usage_msg =
 "USAGE:  ./siktacka-client player_name game_server_host[:port] [ui_server_host[:port]]\n"
 "  player_name      - 0-64 drukowalne znaki ASCII (bez spacji, \"\" oznacza obserwatora\n"
-"  game_server_host - adres IPv4, IPv6 lub nazwa wêz³a\n"
-"  game_server_port - port serwera gry (domyœlnie 12345)\n"
-"  ui_server_host   - nazwa serwera interfejsu u¿ytkownika (domyœlnie localhost)\n"
-"  ui_server_port   - port serwera interfejsu u¿ytkownika (domyœlnie 12346)\n";
+"  game_server_host - adres IPv4, IPv6 lub nazwa wï¿½zï¿½a\n"
+"  game_server_port - port serwera gry (domyï¿½lnie 12345)\n"
+"  ui_server_host   - nazwa serwera interfejsu uï¿½ytkownika (domyï¿½lnie localhost)\n"
+"  ui_server_port   - port serwera interfejsu uï¿½ytkownika (domyï¿½lnie 12346)\n";
 
 struct server_connection {
 	int socket;
@@ -128,7 +131,6 @@ namespace {
 void send_game_job()
 {
 	constexpr std::chrono::milliseconds HEARTBEAT_INTERVAL { 20 };
-	int tick_count = 1;
 	while (true)
 	{
 		auto start_time = current_time_microseconds();
@@ -140,7 +142,7 @@ void send_game_job()
 			// Send heartbeat to 
 			ssize_t snd_len = sendto(game_server.socket, (const char*)buffer.data(), buffer.size(), 0,
 				(sockaddr*)game_server.addr.get(), game_server.addrlen);
-			if (snd_len != buffer.size())
+			if ((size_t)snd_len != buffer.size())
 				util::fatal("Error sending heartbeat message to server");
 
 		}
@@ -196,6 +198,7 @@ void receive_game_job()
 					util::fatal("PLAYER_ELIMINATED contains invalid player number");
 				break;
 			}
+			default: break;
 			}
 
 			if (next_expected_event == event->event_no)
@@ -259,11 +262,15 @@ void send_gui_job()
 				sprintf(buffer, "PLAYER_ELIMINATED %s\n", active_player_names[elim->player_number].c_str());
 				break;
 			}
+			default: break;
 			}
 
 			// TODO: Verify if we need GUI sockaddr for TCP connection
-			ssize_t snd_len = sendto(game_server.socket, (const char*)buffer, strlen(buffer), 0,
+			auto buf_len = strlen(buffer);
+			ssize_t snd_len = sendto(gui_server.socket, (const char*)buffer, strlen(buffer), 0,
 				(sockaddr*)gui_server.addr.get(), gui_server.addrlen);
+			if ((size_t)snd_len != buf_len)
+				util::fatal("Could not succesfully send all data to gui_server");
 		}
 		queued_events.clear();
 	}

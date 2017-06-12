@@ -13,11 +13,10 @@ OBJS = rand.o util.o protocol.o crc32.o map.o
 all: $(BINS)
 
 siktacka-server: server.o $(OBJS)
-	$(CXX) $(CXXFLAGS) $(OBJS) $< -o $@
+	$(CXX) $(CXXFLAGS) $(OBJS) $< -o $@ -lpthread
 
 siktacka-client: client.o $(OBJS)
-	$(CXX) $(CXXFLAGS) $(OBJS) $< -o $@
-
+	$(CXX) $(CXXFLAGS) $(OBJS) $< -o $@ -lpthread
 
 %.o: %.cc
 	$(CXX) -c $(CXXFLAGS) $< -o $@

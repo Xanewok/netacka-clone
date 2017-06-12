@@ -142,12 +142,12 @@ struct in6_addr_port_compare
 	template<size_t off>
 	static std::uint64_t addr_part(const sockaddr_in6& addr)
 	{
-		return *reinterpret_cast<const std::uint64_t*>(addr.sin6_addr.s6_addr[off]);
+		return *reinterpret_cast<const std::uint64_t*>(addr.sin6_addr.s6_addr + off);
 	}
 
 	static auto as_tuple(const sockaddr_in6& sock)
 	{
-		return std::make_tuple(addr_part<0>(sock), addr_part<4>(sock), sock.sin6_port);
+		return std::make_tuple(addr_part<0>(sock), addr_part<8>(sock), sock.sin6_port);
 	}
 
 	static auto as_tuple(const sockaddr_in& sock)

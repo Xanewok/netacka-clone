@@ -291,7 +291,7 @@ void receive_gui_job()
 	char buffer[BUFFER_SIZE];
 	// Since proper messages are newline-separated and TCP operates on stream of data,
 	// copy first 16 signs and match the message
-	char match_buffer[16] = { 0 };
+	char match_buffer[20] = { 0 };
 	size_t msg_len = 0;
 
 	while (true)
@@ -312,7 +312,7 @@ void receive_gui_job()
 				msg_len++;
 			}
 			// End of message and current message length in valid range (to avoid needless checks), check for message
-			if (*pointer == '\n' && msg_len >= sizeof("LEFT_KEY_UP") && msg_len <= sizeof("RIGHT_KEY_DOWN"))
+			if (*pointer == '\n' && msg_len >= sizeof("LEFT_KEY_UP") - 1 && msg_len <= sizeof("RIGHT_KEY_DOWN"))
 			{
 				for (size_t i = 0; i < sizeof(messages) / sizeof(messages[0]); ++i)
 				{

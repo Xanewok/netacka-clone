@@ -212,7 +212,6 @@ void cleanup_game()
 {
 	game_state.in_progress = false;
 	game_state.map = map(configuration.width, configuration.height);
-	game_state.events.clear(); // TODO: Verify
 
 	for (auto& client_kv : game_state.clients)
 	{
@@ -360,9 +359,6 @@ bool try_start_game()
 	{
 		const auto player_count = ready_clients.size();
 
-		// Initialize
-		game_state.in_progress = true;
-
 		game_state.players.resize(player_count);
 		for (size_t i = 0; i < player_count; ++i)
 		{
@@ -393,6 +389,8 @@ bool try_start_game()
 
 		// Use exact specified order/algorithm from the assignment
 		game_state.game_id = rand_gen.next();
+		game_state.in_progress = true;
+		game_state.events.clear();
 
 		generate_event(std::make_shared<new_game>(game_state.map.width, game_state.map.height,
 			player_names));

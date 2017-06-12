@@ -210,6 +210,11 @@ void receive_game_job()
 					util::fatal("PLAYER_ELIMINATED contains invalid player number");
 				break;
 			}
+			case GAME_OVER:
+			{
+				next_expected_event = 0;
+				break;
+			}
 			default: break;
 			}
 

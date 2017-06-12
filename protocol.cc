@@ -24,6 +24,8 @@
 #define ntohll be64toh
 #endif
 
+#include "util.h"
+
 namespace
 {
 	inline std::uint64_t hton(std::uint64_t val) { return htonll(val); }
@@ -366,6 +368,9 @@ std::pair<client_message, bool> client_message::from(const char* stream, size_t 
 		if (pointer[i] == '\0')
 			break;
 	}
+
+	if (!util::is_valid_player_name(msg.player_name, name_len))
+		return std::make_pair(client_message(), false);
 
 	return std::make_pair(msg, true);
 }

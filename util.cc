@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
+#include <cstdarg>
 #include <limits>
 
 #ifdef _WIN32
@@ -63,24 +64,32 @@ std::int64_t parse_bounded(const char* s,
 	return value;
 }
 
-bool is_valid_player_name(const char* str)
+bool is_valid_player_name(const char* str, size_t len, bool allow_empty/* = true*/)
 {
 	constexpr size_t max_name_len = 64;
-	constexpr char min_valid_name_char = 33;
-	constexpr char max_valid_name_char = 126;
-
-	if (str == nullptr || *str == '0')
-		return false;
-
-	auto len = strlen(str);
 	if (len > max_name_len)
 		return false;
 
+	if (!allow_empty && (str == nullptr || *str == '0'))
+		return false;
+
 	for (size_t i = 0; i < len; ++i)
-		if (str[i] < min_valid_name_char || str[i] > max_valid_name_char)
+		if (str[i] == ' ' || !isprint(str[i]))
 			return false;
 
 	return true;
+}
+
+void fatal(const char *fmt, ...)
+{
+	va_list fmt_args;
+
+	fprintf(stderr, "Fatal error: ");
+	va_start(fmt_args, fmt);
+	vfprintf(stderr, fmt, fmt_args);
+	va_end(fmt_args);
+	fprintf(stderr, "\n");
+	std::exit(1);
 }
 
 } // util

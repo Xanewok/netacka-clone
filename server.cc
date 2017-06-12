@@ -528,14 +528,15 @@ void update_game_job()
 		auto start_time = current_time_microseconds();
 		{
 			std::lock_guard<std::recursive_mutex> _lock(game_state.lock);
-			// TODO: Don't lock when game isn't in progress
+
 			if (game_state.in_progress)
 			{
 				do_game_tick();
 			}
 
 			constexpr int PRUNE_EVERY_TICKS = 15;
-			if (++tick_count % PRUNE_EVERY_TICKS == 0)
+			tick_count = (tick_count + 1) % PRUNE_EVERY_TICKS;
+			if (tick_count == 0)
 			{
 				prune_inactive_clients();
 			}

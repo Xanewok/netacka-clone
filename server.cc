@@ -29,7 +29,7 @@ using ssize_t = SSIZE_T;
 #include <sys/socket.h>
 #include <netinet/in.h>
 #define _BSD_SOURCE
-#include <endian.h> // TODO: Verify
+#include <endian.h>
 #endif
 
 #include "protocol.h"
@@ -170,7 +170,6 @@ static struct {
 	std::recursive_mutex lock; // TODO: Replace with fair, priority mutex
 } game_state;
 
-// TODO: Use it
 void prune_inactive_clients()
 {
 	for (auto it = game_state.clients.begin(); it != game_state.clients.end();)
@@ -213,24 +212,6 @@ void cleanup_game()
 }
 
 static int server_socket;
-
-// TODO: Send series of messages up to next_expected_event for each player individually
-// TODO: bundle up net messages
-void broadcast_event(struct event* event)
-{
-	const auto buffer = event->as_stream();
-
-	for (const auto& client_kv : game_state.clients)
-	{
-		const sockaddr_in6& client_address = client_kv.first;
-
-		ssize_t snd_len = sendto(server_socket, (const char*)buffer.data(), buffer.size(), 0,
-			(sockaddr*)&client_address, sizeof(client_address));
-
-		if (snd_len != static_cast<ssize_t>(buffer.size()))
-			fprintf(stderr, "Error sending event: %s\n", buffer.data());
-	}
-}
 
 // Returns how many events were sent to client
 int broadcast_events(const std::vector<std::shared_ptr<event>>& events, std::uint32_t game_id,
@@ -290,12 +271,9 @@ void generate_event(std::shared_ptr<event> event)
 {
 	// First broadcast the event
 	event->event_no = game_state.events.size() + 1;
+	game_state.events.push_back(event);
 
-	// TODO: Send series of messages up to next_expected_event for each player individually
 	auto raw_event = event.get();
-	broadcast_event(raw_event);
-
-	game_state.events.push_back(std::move(event));
 
 	// Then act accordingly
 	switch (event->event_type)
@@ -491,8 +469,6 @@ void handle_client_message(const client_message& msg, const struct sockaddr_in6&
 		if (try_start_game())
 			return;
 	}
-
-	// TODO: Send series of messeges up to next_expected_event
 }
 
 void do_game_tick()

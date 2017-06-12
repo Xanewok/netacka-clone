@@ -627,6 +627,22 @@ namespace {
 
 int main(int argc, char* argv[])
 {
+#ifdef _WIN32
+	WORD wVersionRequested;
+	WSADATA wsaData;
+
+	/* Use the MAKEWORD(lowbyte, highbyte) macro declared in Windef.h */
+	wVersionRequested = MAKEWORD(2, 2);
+
+	int err = WSAStartup(wVersionRequested, &wsaData);
+	if (err != 0) {
+		/* Tell the user that we could not find a usable */
+		/* Winsock DLL.                                  */
+		printf("WSAStartup failed with error: %d\n", err);
+		return 1;
+	}
+#endif
+
 	// Parse optional arguments
 	for (int i = 1; i < argc; i += 2)
 	{
@@ -700,6 +716,10 @@ int main(int argc, char* argv[])
 
 	// Initialized IPv6 UPD socket for client-connection
 	server_socket = socket(AF_INET6, SOCK_DGRAM, 0);
+#ifdef _WIN32
+	fprintf(stderr, "socket: WSAGetLastError: %d\n", WSAGetLastError());
+#endif
+	fprintf(stderr, "errno: %d\n", errno);
 	ensure_with_errno(server_socket, "socket");
 
 	// Disable IPv6-only option for sockets
@@ -713,6 +733,10 @@ int main(int argc, char* argv[])
 	server_address.sin6_port = htons(configuration.port_num);
 
 	int ret = bind(server_socket, (struct sockaddr *) &server_address, (socklen_t) sizeof(server_address));
+#ifdef _WIN32
+	fprintf(stderr, "bind: WSAGetLastError: %d\n", WSAGetLastError());
+#endif
+	fprintf(stderr, "errno: %d\n", errno);
 	ensure_with_errno(ret, "bind");
 
 	std::thread recv(receive_messages_job);

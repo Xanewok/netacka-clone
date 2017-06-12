@@ -707,9 +707,9 @@ int main(int argc, char* argv[])
 	setsockopt(server_socket, IPPROTO_IPV6, IPV6_V6ONLY, (const char*)&no, sizeof(no));
 
 	struct sockaddr_in6 server_address;
+	memset(&server_address, 0x00, sizeof(server_address));
 	server_address.sin6_family = AF_INET6;
 	server_address.sin6_addr = in6addr_any;
-	printf("%d\n", configuration.port_num);
 	server_address.sin6_port = htons(configuration.port_num);
 
 	int ret = bind(server_socket, (struct sockaddr *) &server_address, (socklen_t) sizeof(server_address));

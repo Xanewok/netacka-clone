@@ -14,6 +14,7 @@
 #include <chrono>
 #include <algorithm>
 #include <array>
+#include <mutex>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -37,7 +38,7 @@ using ssize_t = SSIZE_T;
 #include "map.h"
 
 using namespace std::chrono;
-using namespace std::chrono_literals;
+
 
 constexpr const char* usage_msg =
 "USAGE:  ./siktacka-server [-W n] [-H n] [-p n] [-s n] [-t n] [-r n]\n"
@@ -53,12 +54,6 @@ constexpr const char* usage_msg =
 constexpr int MAX_CLIENTS = 42;
 constexpr std::chrono::milliseconds CLIENT_CONNECTION_TIMEOUT = 2000ms;
 
-std::chrono::milliseconds current_time_ms()
-{
-	 return duration_cast<std::chrono::milliseconds>(
-		 system_clock::now().time_since_epoch());
-}
-
 static Rand rand_gen;
 
 static struct {
@@ -71,10 +66,24 @@ static struct {
 	bool seed_provided = false;
 } configuration;
 
-static float get_cached_round_time_ms()
+static std::chrono::microseconds round_budget_microseconds()
 {
-	static float round_time = 1000.f / configuration.rounds_per_sec;
-	return round_time;
+	using namespace std::chrono_literals;
+
+	auto budget = std::chrono::milliseconds{ 1s } / configuration.rounds_per_sec;
+	return budget;
+}
+
+std::chrono::microseconds current_time_microseconds()
+{
+	return duration_cast<std::chrono::microseconds>(
+		system_clock::now().time_since_epoch());
+}
+
+std::chrono::milliseconds current_time_ms()
+{
+	return duration_cast<std::chrono::milliseconds>(
+		system_clock::now().time_since_epoch());
 }
 
 // Players are identified by (socket, session_id) pair
@@ -158,7 +167,7 @@ static struct {
 	// Cached players with ordering for given game (reinitialized for every game)
 	std::vector<server_player> players;
 
-	std::chrono::milliseconds next_game_tick = std::chrono::milliseconds(0);
+	std::recursive_mutex lock; // TODO: Replace with fair, priority mutex
 } game_state;
 
 // TODO: Use it
@@ -224,35 +233,38 @@ void broadcast_event(struct event* event)
 }
 
 // Returns how many events were sent to client
-int broadcast_events(const client_connection& client, size_t max_send_count = 5)
+int broadcast_events(const std::vector<std::shared_ptr<event>>& events, std::uint32_t game_id,
+	const sockaddr_in6& client_socket, std::uint32_t next_expected_event, size_t max_send_count = 5)
 {
-	const auto next_expected = client.last_message.next_expected_event;
-	const auto event_count = game_state.events.size();
-	if (next_expected > event_count)
+	const auto event_count = events.size();
+	if (next_expected_event > event_count)
 		return 0;
 
-	auto send_count = std::min(event_count - next_expected, max_send_count);
+	auto send_count = std::min(event_count - next_expected_event, max_send_count);
 	if (send_count == 0)
 		return 0;
+
+	server_message msg;
+	msg.game_id = game_id;
 
 	size_t sent = 0;
 	while (sent < send_count)
 	{
-		server_message msg;
-		msg.game_id = game_state.game_id;
+		msg.events.clear();
 
 		// Try to split and pack requested events into different server_messages
 		// respecting maximum size of events packet data payload
 		int events_size = 0;
 		for (; sent < send_count; ++sent)
 		{
-			const event& event = *game_state.events[next_expected + sent];
+			const event& event = *events[next_expected_event + sent];
 			const auto event_length = event.calculate_total_len_with_crc32();
 
 			if (events_size + event_length > server_message::MAX_EVENTS_LEN)
 				break;
-			else
-				events_size += event_length;
+			
+			events_size += event_length;
+			msg.events.push_back(&event);
 		}
 
 		const auto buffer = msg.as_stream();
@@ -261,9 +273,9 @@ int broadcast_events(const client_connection& client, size_t max_send_count = 5)
 #ifdef linux
 		flags = MSG_DONTWAIT;
 #endif
-		const sockaddr_in6& client_address = client.socket;
+
 		ssize_t snd_len = sendto(server_socket, (const char*)buffer.data(), buffer.size(), flags,
-			(sockaddr*)&client_address, sizeof(client_address));
+			(sockaddr*)&client_socket, sizeof(client_socket));
 
 		const bool would_block = errno == EAGAIN || errno == EWOULDBLOCK;
 
@@ -508,6 +520,101 @@ void do_game_tick()
 	}
 }
 
+void update_game_job()
+{
+	int tick_count = 1;
+	while (true)
+	{
+		auto start_time = current_time_microseconds();
+		{
+			std::lock_guard<std::recursive_mutex> _lock(game_state.lock);
+			// TODO: Don't lock when game isn't in progress
+			if (game_state.in_progress)
+			{
+				do_game_tick();
+			}
+
+			constexpr int PRUNE_EVERY_TICKS = 15;
+			if (++tick_count % PRUNE_EVERY_TICKS == 0)
+			{
+				prune_inactive_clients();
+			}
+		}
+		auto elapsed = current_time_microseconds() - start_time;
+		if (elapsed < round_budget_microseconds())
+		{
+			auto remainder = round_budget_microseconds() - elapsed;
+			std::this_thread::sleep_for(remainder);
+		}
+	}
+}
+
+void receive_messages_job()
+{
+	constexpr int MSG_BUFFER_SIZE = 10000;
+	char buffer[MSG_BUFFER_SIZE];
+	struct sockaddr_in6 client_address;
+
+	while (true)
+	{
+		socklen_t rcva_len = (socklen_t) sizeof(client_address);
+		ssize_t len = recvfrom(server_socket, buffer, sizeof(buffer), 0,
+			(struct sockaddr *) &client_address, &rcva_len);
+		if (len < 0)
+		{
+			fprintf(stderr, "error on datagram from client socket\n");
+			continue;
+		}
+
+		if (len > MSG_BUFFER_SIZE) {
+			fprintf(stderr, "read from socket message exceeding %d bytes, ignoring\n", MSG_BUFFER_SIZE);
+			continue;
+		}
+
+		fprintf(stderr, "read from socket: %zd bytes: %.*s\n", len, (int)len, buffer);
+		auto parsed_msg = client_message::from(buffer, len);
+		if (parsed_msg.second == false) {
+			fprintf(stderr, "Error parsing message: %s\n", buffer);
+		}
+		else
+		{
+			// TODO: Replace with fair, low priority lock
+			std::lock_guard<std::recursive_mutex> _lock(game_state.lock);
+
+			handle_client_message(parsed_msg.first, client_address);
+		}
+	}
+}
+
+void send_events_job()
+{
+	constexpr std::chrono::milliseconds SEND_INTERVAL { 5 };
+
+	std::uint32_t game_id;
+	std::vector<std::shared_ptr<event>> events;
+	std::map<sockaddr_in6, uint32_t, in6_addr_port_compare> clients;
+	while (true)
+	{
+		// We can afford to send stale data, so lock for a short period of time and copy data for sending
+		{
+			// TODO: Replace with fair, low priority lock
+			std::lock_guard<std::recursive_mutex> _lock(game_state.lock);
+			game_id = game_state.game_id;
+			events = game_state.events;
+
+			clients.clear();
+			for (auto& kv : game_state.clients)
+				clients[kv.first] = kv.second.last_message.next_expected_event;
+		}
+
+		int sent_events = 0;
+		for (auto& kv : clients)
+			sent_events += broadcast_events(events, game_id, kv.first, kv.second);
+
+		std::this_thread::sleep_for(SEND_INTERVAL);
+	}
+}
+
 namespace {
 	void ensure_with_errno(int value, const char* msg)
 	{
@@ -608,31 +715,13 @@ int main(int argc, char* argv[])
 	int ret = bind(server_socket, (struct sockaddr *) &server_address, (socklen_t) sizeof(server_address));
 	ensure_with_errno(ret, "bind");
 
-	// Receive data from clients
-	constexpr int BUFFER_SIZE = 100000;
-	char buffer[BUFFER_SIZE];
-	struct sockaddr_in6 client_address;
-	//socklen_t snda_len = (socklen_t) sizeof(client_address);
-	while (true)
-	{
-		socklen_t rcva_len = (socklen_t) sizeof(client_address);
-		ssize_t len = recvfrom(server_socket, buffer,sizeof(buffer), 0,
-			(struct sockaddr *) &client_address, &rcva_len);
-		ensure_with_errno(len, "error on datagram from client socket");
+	std::thread recv(receive_messages_job);
+	std::thread send(send_events_job);
+	std::thread update(update_game_job);
 
-		if (len > BUFFER_SIZE) {
-			fprintf(stderr, "read from socket message exceeding %d bytes, ignoring\n", BUFFER_SIZE);
-			continue;
-		}
-
-		fprintf(stderr, "read from socket: %zd bytes: %.*s\n", len, (int) len, buffer);
-		auto parsed_msg = client_message::from(buffer, len);
-		if (parsed_msg.second == false) {
-			fprintf(stderr, "Received malformed message: %s\n", buffer);
-		}
-
-		handle_client_message(parsed_msg.first, client_address);
-	}
+	recv.join();
+	send.join();
+	update.join();
 
 	return 0;
 }

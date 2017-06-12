@@ -24,7 +24,7 @@ struct client_message
 struct server_message
 {
 	std::uint32_t game_id;
-	std::vector<event*> events;
+	std::vector<const event*> events;
 
 	constexpr static int HEADER_LEN = sizeof(server_message::game_id);
 	constexpr static int MAX_EVENTS_LEN = MAX_EVENT_PACKET_DATA_SIZE

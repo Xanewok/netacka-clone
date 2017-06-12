@@ -39,11 +39,11 @@ using ssize_t = SSIZE_T;
 
 constexpr const char* usage_msg =
 "USAGE:  ./siktacka-client player_name game_server_host[:port] [ui_server_host[:port]]\n"
-"  player_name – 0-64 drukowalne znaki ASCII (bez spacji, \"\" oznacza obserwatora\n"
-"  game_server_host – adres IPv4, IPv6 lub nazwa wêz³a\n"
-"  game_server_port - port serwera gry (domyœlnie 12345)\n"
-"  ui_server_host   - nazwa serwera interfejsu u¿ytkownika (domyœlnie localhost)\n"
-"  ui_server_port   - port serwera interfejsu u¿ytkownika (domyœlnie 12346)\n";
+"  player_name ï¿½ 0-64 drukowalne znaki ASCII (bez spacji, \"\" oznacza obserwatora\n"
+"  game_server_host ï¿½ adres IPv4, IPv6 lub nazwa wï¿½zï¿½a\n"
+"  game_server_port - port serwera gry (domyï¿½lnie 12345)\n"
+"  ui_server_host   - nazwa serwera interfejsu uï¿½ytkownika (domyï¿½lnie localhost)\n"
+"  ui_server_port   - port serwera interfejsu uï¿½ytkownika (domyï¿½lnie 12346)\n";
 
 struct server_connection {
 	int socket;
@@ -55,8 +55,8 @@ struct server_connection {
 };
 
 static server_connection servers[2] = {
-	{ 0, 0, 0, SOCK_DGRAM, "", 12345 }, // game server
-	{ 0, 0, 0, SOCK_STREAM, "localhost", 123456 } // ui server
+	{ 0, 0, 0, SOCK_DGRAM, "", (std::uint16_t)12345 }, // game server
+	{ 0, 0, 0, SOCK_STREAM, "localhost", (std::uint16_t)12346 } // ui server
 };
 
 static server_connection& game_server = servers[0];

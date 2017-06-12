@@ -574,7 +574,10 @@ void receive_messages_job()
 		fprintf(stderr, "read from socket: %zd bytes: %.*s\n", len, (int)len, buffer);
 		auto parsed_msg = client_message::from(buffer, len);
 		if (parsed_msg.second == false) {
-			fprintf(stderr, "Error parsing message: %s\n", buffer);
+			fprintf(stderr, "Error parsing message (hex): ");
+			for (int i = 0; i < len; ++i)
+				fprintf(stderr, "%02X", buffer[i]);
+			fprintf(stderr, "\n");
 		}
 		else
 		{
@@ -654,6 +657,7 @@ int main(int argc, char* argv[])
 			std::exit(1);
 		}
 
+		// TODO: Catch parsing error and exit with 1
 		switch (arg[1])
 		{
 		case 'W':

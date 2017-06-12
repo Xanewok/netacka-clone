@@ -359,7 +359,6 @@ std::pair<client_message, bool> client_message::from(const char* stream, size_t 
 	if (std::abs(msg.turn_direction) > 1)
 		return std::make_pair(client_message(), false);
 
-
 	const size_t name_len = std::min(len - MIN_MESSAGE_LEN + 1, sizeof(msg.player_name));
 	for (size_t i = 0; i < name_len; ++i)
 	{

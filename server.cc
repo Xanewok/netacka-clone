@@ -184,6 +184,9 @@ static struct {
 	std::vector<server_player> players;
 
 	std::recursive_mutex lock; // TODO: Replace with fair, priority mutex
+	// Since clients only have next_expected_event, use this flag to tell sender thread
+	// to ignore it and inform client regardless of their last next_expected_event
+	bool send_new_events = false;
 } game_state;
 
 void prune_inactive_clients()
@@ -231,8 +234,11 @@ void cleanup_game()
 static int server_socket;
 
 // Returns how many events were sent to client
-int broadcast_events(const std::vector<std::shared_ptr<event>>& events, std::uint32_t game_id,
-	const sockaddr_storage& client_socket, std::uint32_t next_expected_event, size_t max_send_count = 5)
+int broadcast_events(const std::vector<std::shared_ptr<event>>& events,
+	std::uint32_t game_id,
+	const sockaddr_storage& client_socket,
+	std::uint32_t next_expected_event,
+	size_t max_send_count = 5)
 {
 	const auto event_count = events.size();
 	if (next_expected_event > event_count)
@@ -359,13 +365,16 @@ bool try_start_game()
 	{
 		const auto player_count = ready_clients.size();
 
+		// Initialize active players structure
 		game_state.players.resize(player_count);
 		for (size_t i = 0; i < player_count; ++i)
 		{
 			client_connection* client = ready_clients[i];
-			client->state = client_state::playing;
-
 			server_player& player = game_state.players[i];
+
+			client->state = client_state::playing;
+			client->player = &player;
+
 			player.connection = client;
 			player.name = std::string(client->last_message.player_name);
 		}
@@ -390,6 +399,7 @@ bool try_start_game()
 		// Use exact specified order/algorithm from the assignment
 		game_state.game_id = rand_gen.next();
 		game_state.in_progress = true;
+		game_state.send_new_events = true;
 		game_state.events.clear();
 
 		generate_event(std::make_shared<new_game>(game_state.map.width, game_state.map.height,
@@ -610,12 +620,22 @@ void send_events_job()
 
 			clients.clear();
 			for (auto& kv : game_state.clients)
-				clients[kv.first] = kv.second.last_message.next_expected_event;
+			{
+				// Override clients' old next_expected_events if needed (e.g. for NEW_GAME)
+				const auto next_expected_event = game_state.send_new_events ? 0 :
+					kv.second.last_message.next_expected_event;
+
+				clients[kv.first] = next_expected_event;
+			}
+
+			if (game_state.send_new_events)
+				game_state.send_new_events = false;
 		}
 
 		int sent_events = 0;
-		for (auto& kv : clients)
+		for (auto& kv : clients) {
 			sent_events += broadcast_events(events, game_id, kv.first, kv.second);
+		}
 
 		std::this_thread::sleep_for(SEND_INTERVAL);
 	}

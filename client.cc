@@ -189,8 +189,14 @@ void receive_game_job()
 			case NEW_GAME:
 			{
 				game_id = msg.game_id;
+				next_expected_event = 0;
 
 				new_game* new_game = static_cast<struct new_game*>(event.get());
+				if (new_game->event_no != 0) {
+					fprintf(stderr, "Received invalid NEW_GAME with event_no != 0\n");
+					std::exit(1);
+				}
+
 				active_player_names = new_game->player_names;
 				maxx = new_game->maxx;
 				maxy = new_game->maxy;
@@ -208,11 +214,6 @@ void receive_game_job()
 				player_eliminated* elim = static_cast<player_eliminated*>(event.get());
 				if (elim->player_number >= active_player_names.size())
 					util::fatal("PLAYER_ELIMINATED contains invalid player number");
-				break;
-			}
-			case GAME_OVER:
-			{
-				next_expected_event = 0;
 				break;
 			}
 			default: break;
@@ -449,7 +450,7 @@ int main(int argc, const char* argv[])
 		}
 
 		if (p == nullptr)
-			util::fatal("Couldn't establish a connection to %s", server.hostname.c_str());
+			util::fatal("Couldn't establish a connection to %s:%hu", server.hostname.c_str(), server.port);
 
 		freeaddrinfo(res);
 	}

@@ -9,8 +9,10 @@
 #include <iterator>
 #include <utility>
 #include <cassert>
+#include <algorithm>
 
 #ifdef _WIN32
+#define NOMINMAX
 #pragma comment(lib, "Ws2_32.lib")
 #include <WinSock2.h> // endianness helpers
 #else
@@ -45,6 +47,7 @@ namespace
 			return false;
 
 		destination = ntoh(*reinterpret_cast<const T*>(pointer));
+		pointer += sizeof(T);
 		return true;
 	}
 
@@ -352,7 +355,13 @@ std::pair<client_message, bool> client_message::from(const char* stream, size_t 
 	consume_bytes(data, len, pointer, msg.turn_direction);
 	consume_bytes(data, len, pointer, msg.next_expected_event);
 
-	for (size_t i = 0; i < sizeof(msg.player_name); ++i)
+	// Only { -1, 0, 1 } are valid turn_directions
+	if (std::abs(msg.turn_direction) > 1)
+		return std::make_pair(client_message(), false);
+
+
+	const size_t name_len = std::min(len - MIN_MESSAGE_LEN + 1, sizeof(msg.player_name));
+	for (size_t i = 0; i < name_len; ++i)
 	{
 		msg.player_name[i] = pointer[i];
 		if (pointer[i] == '\0')

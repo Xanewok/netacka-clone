@@ -60,7 +60,7 @@ namespace
 	template<typename T>
 	void append_bytes(std::vector<std::uint8_t>& stream, T bytes)
 	{
-		stream.insert(stream.end(), std::rbegin(*bytes), std::rend(*bytes));
+		stream.insert(stream.end(), std::begin(*bytes), std::end(*bytes));
 	}
 
 	void append_string(std::vector<std::uint8_t>& stream, const char* str)

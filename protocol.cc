@@ -43,7 +43,7 @@ namespace
 	template<typename T>
 	bool consume_bytes(const std::uint8_t* stream, size_t len, const std::uint8_t*& pointer, T& destination)
 	{
-		assert(pointer >= stream && pointer < stream + len);
+		assert(len == 0 || (pointer >= stream && pointer < stream + len));
 		// Not enough data in the stream
 		if (pointer + sizeof(T) > stream + len)
 			return false;
@@ -93,7 +93,7 @@ std::uint32_t event::calculate_len() const
 
 std::uint32_t event::calculate_total_len_with_crc32() const
 {
-	return calculate_len() + sizeof(crc32);
+	return sizeof(len) + calculate_len() + sizeof(crc32);
 }
 
 std::vector<std::uint8_t> event::as_stream() const
@@ -143,9 +143,9 @@ std::shared_ptr<event> event::parse(const char* buf, size_t buf_len, bool requir
 		return nullptr;
 	
 	event->len = len;
-	event->event_no;
+	event->event_no = event_no;
 
-	pointer = event->parse_event_data(pointer, len - event::HEADER_LEN - sizeof(event::crc32));
+	pointer = event->parse_event_data(pointer, len - sizeof(event::event_no) - sizeof(event::event_type));
 	// Could not succesfully parse event_data depending on event type
 	if (pointer == nullptr)
 		return nullptr;
@@ -154,11 +154,11 @@ std::shared_ptr<event> event::parse(const char* buf, size_t buf_len, bool requir
 		return nullptr;
 
 	// Reported message length and parsed len do not match
-	if (require_exact_size && len != (pointer - stream) - sizeof(event::crc32) - sizeof(event::len))
-		return nullptr;
+	//if (require_exact_size && len != (pointer - stream) - sizeof(event::crc32) - sizeof(event::len))
+	//	return nullptr;
 
 	// CRC checksum mismatch
-	auto crc = xcrc32(stream, (pointer - stream) - sizeof(event::crc32), 0);
+	auto crc = xcrc32(stream, (pointer - sizeof(event::crc32)) - stream, 0);
 	if (crc != event->crc32) {
 		fprintf(stderr, "CRC checksum mismatch\n");
 		return nullptr;
@@ -346,7 +346,7 @@ std::pair<server_message, bool> server_message::from(const char* stream, size_t 
 		return { msg, false };
 
 	int message_len = sizeof(msg.game_id);
-	while (len < MAX_EVENT_PACKET_DATA_SIZE)
+	while (message_len < MAX_EVENT_PACKET_DATA_SIZE)
 	{
 		auto event = event::parse((const char*)pointer, len - message_len);
 		// One of the events is probably malformed (partial message is acceptable if we have > 0 correct events)
@@ -357,8 +357,10 @@ std::pair<server_message, bool> server_message::from(const char* stream, size_t 
 		if (len + event_len > MAX_EVENT_PACKET_DATA_SIZE)
 			break;
 
-		msg.events.push_back(event);
+		pointer += event_len;
+
 		message_len += event_len;
+		msg.events.push_back(event);
 	}
 
 	return { msg, true };

@@ -24,13 +24,14 @@ struct client_message
 struct server_message
 {
 	std::uint32_t game_id;
-	std::vector<const event*> events;
+	std::vector<std::shared_ptr<event>> events;
 
 	constexpr static int HEADER_LEN = sizeof(server_message::game_id);
 	constexpr static int MAX_EVENTS_LEN = MAX_EVENT_PACKET_DATA_SIZE
 		- sizeof(server_message::game_id);
 
 	std::vector<std::uint8_t> as_stream() const;
+	static std::pair<server_message, bool> from(const char* stream, size_t len);
 };
 
 
@@ -63,7 +64,7 @@ struct event
 	// Overridable for extending subclasses
 	virtual std::vector<std::uint8_t> aux_as_stream() const;
 
-	static std::shared_ptr<event> parse(const char* buf, size_t len);
+	static std::shared_ptr<event> parse(const char* buf, size_t len, bool require_exact_size = false);
 	virtual const uint8_t* parse_event_data(const uint8_t* buf, size_t len);
 };
 

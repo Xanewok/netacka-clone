@@ -238,14 +238,14 @@ int broadcast_events(const std::vector<std::shared_ptr<event>>& events, std::uin
 		int events_size = 0;
 		for (; sent < send_count; ++sent)
 		{
-			const event& event = *events[next_expected_event + sent];
-			const auto event_length = event.calculate_total_len_with_crc32();
+			const auto& event = events[next_expected_event + sent];
+			const auto event_length = event->calculate_total_len_with_crc32();
 
 			if (events_size + event_length > server_message::MAX_EVENTS_LEN)
 				break;
 			
 			events_size += event_length;
-			msg.events.push_back(&event);
+			msg.events.push_back(event);
 		}
 
 		const auto buffer = msg.as_stream();

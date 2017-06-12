@@ -120,17 +120,13 @@ std::vector<std::uint8_t> event::aux_as_stream() const
 }
 
 /* static */
-std::shared_ptr<event> parse(const char* buf, size_t buf_len)
+std::shared_ptr<event> event::parse(const char* buf, size_t buf_len, bool require_exact_size/* = false*/)
 {
 	const std::uint8_t* stream = reinterpret_cast<const std::uint8_t*>(buf);
 	const std::uint8_t* pointer = stream;
 
 	std::uint32_t len;
 	if (!consume_bytes(stream, buf_len, pointer, len))
-		return nullptr;
-
-	// Received message length and parsed len do not match - invalid message 
-	if (len != buf_len - sizeof(event::len) - sizeof(event::crc32))
 		return nullptr;
 
 	std::uint8_t event_type;
@@ -157,9 +153,9 @@ std::shared_ptr<event> parse(const char* buf, size_t buf_len)
 	if (!consume_bytes(stream, buf_len, pointer, event->crc32))
 		return nullptr;
 
-	auto byte_buf = reinterpret_cast<const std::uint8_t*>(buf); 
-	// Received message is larger than can't be parsed - incorrect message
-	if (pointer != byte_buf + buf_len)
+	auto byte_buf = reinterpret_cast<const std::uint8_t*>(buf);
+	// Reported message length and parsed len do not match
+	if (require_exact_size && len != (pointer - byte_buf) - sizeof(event::crc32) - sizeof(event::len))
 		return nullptr;
 
 	// CRC checksum mismatch
@@ -337,6 +333,35 @@ std::vector<std::uint8_t> server_message::as_stream() const
 
 	stream.shrink_to_fit();
 	return stream;
+}
+
+/* static */
+std::pair<server_message, bool> server_message::from(const char* stream, size_t len)
+{
+	server_message msg;
+
+	const uint8_t* data = reinterpret_cast<const std::uint8_t*>(stream);
+	const uint8_t* pointer = data;
+	if (!consume_bytes(data, len, pointer, msg.game_id))
+		return { msg, false };
+
+	int message_len = sizeof(msg.game_id);
+	while (len < MAX_EVENT_PACKET_DATA_SIZE)
+	{
+		auto event = event::parse((const char*)pointer, len - message_len);
+		// One of the events is probably malformed (partial message is acceptable if we have > 0 correct events)
+		if (event == nullptr)
+			return { msg, msg.events.size() > 0 };
+
+		const auto event_len = event->calculate_total_len_with_crc32();
+		if (len + event_len > MAX_EVENT_PACKET_DATA_SIZE)
+			break;
+
+		msg.events.push_back(event);
+		len += event_len;
+	}
+
+	return { msg, true };
 }
 
 /* static */

@@ -98,7 +98,7 @@ struct server_player;
 
 constexpr static std::chrono::milliseconds MIN_MESSAGE_DELAY { 2 };
 struct client_connection {
-	sockaddr_in6 socket;
+	sockaddr_storage socket;
 
 	client_message last_message;
 	std::chrono::milliseconds last_message_time;
@@ -150,13 +150,28 @@ struct in6_addr_port_compare
 		return std::make_tuple(addr_part<0>(sock), addr_part<4>(sock), sock.sin6_port);
 	}
 
-	bool operator()(const sockaddr_in6& lhs, const sockaddr_in6& rhs) const
+	static auto as_tuple(const sockaddr_in& sock)
 	{
-		return as_tuple(lhs) < as_tuple(rhs);
+		return std::make_tuple(sock.sin_addr.s_addr, sock.sin_port);
+	}
+
+	bool operator()(const sockaddr_storage& lhs, const sockaddr_storage& rhs) const
+	{
+		if (lhs.ss_family == rhs.ss_family)
+		{
+			if (lhs.ss_family == AF_INET6)
+				return as_tuple(*reinterpret_cast<const sockaddr_in6*>(&lhs))
+					 < as_tuple(*reinterpret_cast<const sockaddr_in6*>(&rhs));
+			else
+				return as_tuple(*reinterpret_cast<const sockaddr_in*>(&lhs))
+					 < as_tuple(*reinterpret_cast<const sockaddr_in*>(&rhs));
+		}
+		else
+			return lhs.ss_family < rhs.ss_family;
 	}
 };
 
-using player_collection_t = std::map<sockaddr_in6, client_connection, in6_addr_port_compare>;
+using player_collection_t = std::map<sockaddr_storage, client_connection, in6_addr_port_compare>;
 static struct {
 	std::uint32_t game_id;
 	bool in_progress = false;
@@ -216,7 +231,7 @@ static int server_socket;
 
 // Returns how many events were sent to client
 int broadcast_events(const std::vector<std::shared_ptr<event>>& events, std::uint32_t game_id,
-	const sockaddr_in6& client_socket, std::uint32_t next_expected_event, size_t max_send_count = 5)
+	const sockaddr_storage& client_socket, std::uint32_t next_expected_event, size_t max_send_count = 5)
 {
 	const auto event_count = events.size();
 	if (next_expected_event > event_count)
@@ -394,7 +409,7 @@ bool try_start_game()
 	return true;
 }
 
-void handle_client_message(const client_message& msg, const struct sockaddr_in6& sock)
+void handle_client_message(const client_message& msg, const struct sockaddr_storage& sock)
 {
 	const bool wants_to_spectate = (strlen(msg.player_name) == 0);
 
@@ -531,7 +546,7 @@ void receive_messages_job()
 {
 	constexpr int MSG_BUFFER_SIZE = 10000;
 	char buffer[MSG_BUFFER_SIZE];
-	struct sockaddr_in6 client_address;
+	struct sockaddr_storage client_address;
 
 	while (true)
 	{
@@ -573,7 +588,7 @@ void send_events_job()
 
 	std::uint32_t game_id;
 	std::vector<std::shared_ptr<event>> events;
-	std::map<sockaddr_in6, uint32_t, in6_addr_port_compare> clients;
+	std::map<sockaddr_storage, uint32_t, in6_addr_port_compare> clients;
 	while (true)
 	{
 		// We can afford to send stale data, so lock for a short period of time and copy data for sending

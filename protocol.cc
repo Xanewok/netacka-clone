@@ -153,15 +153,16 @@ std::shared_ptr<event> event::parse(const char* buf, size_t buf_len, bool requir
 	if (!consume_bytes(stream, buf_len, pointer, event->crc32))
 		return nullptr;
 
-	auto byte_buf = reinterpret_cast<const std::uint8_t*>(buf);
 	// Reported message length and parsed len do not match
-	if (require_exact_size && len != (pointer - byte_buf) - sizeof(event::crc32) - sizeof(event::len))
+	if (require_exact_size && len != (pointer - stream) - sizeof(event::crc32) - sizeof(event::len))
 		return nullptr;
 
 	// CRC checksum mismatch
-	auto crc = xcrc32(byte_buf, buf_len - sizeof(event::crc32), 0);
-	if (crc != event->crc32)
+	auto crc = xcrc32(stream, (pointer - stream) - sizeof(event::crc32), 0);
+	if (crc != event->crc32) {
+		fprintf(stderr, "CRC checksum mismatch\n");
 		return nullptr;
+	}
 
 	// Data was exact, event could be created and crc matches - we're good to go
 	return event;
@@ -215,7 +216,6 @@ const uint8_t* new_game::parse_event_data(const uint8_t* buf, size_t len)
 	if (!consume_bytes(buf, len, pointer, this->maxx)) return nullptr;
 	if (!consume_bytes(buf, len, pointer, this->maxy)) return nullptr;
 
-	std::vector<std::string> names;
 	while (pointer < buf + len)
 	{
 		const char* str = reinterpret_cast<const char*>(pointer);
@@ -228,7 +228,7 @@ const uint8_t* new_game::parse_event_data(const uint8_t* buf, size_t len)
 		if (name_end >= buf + len || *name_end != '\0')
 			return nullptr;
 
-		names.push_back(std::string(str));
+		this->player_names.push_back(std::string(str));
 		pointer += name_len + sizeof('\0');
 	}
 
@@ -358,7 +358,7 @@ std::pair<server_message, bool> server_message::from(const char* stream, size_t 
 			break;
 
 		msg.events.push_back(event);
-		len += event_len;
+		message_len += event_len;
 	}
 
 	return { msg, true };

@@ -142,7 +142,14 @@ struct in6_addr_port_compare
 	template<size_t off>
 	static std::uint64_t addr_part(const sockaddr_in6& addr)
 	{
-		return *reinterpret_cast<const std::uint64_t*>(addr.sin6_addr.s6_addr + off);
+		std::uint64_t result = 0;
+		for (size_t i = 0; i < sizeof(result); ++i) {
+			const std::uint64_t addr_byte = addr.sin6_addr.s6_addr[i + off];
+			result = result | (addr_byte << (i * sizeof(result)));
+		}
+		return result;
+		// Above code should be roughly equivalent to: (but with strict aliasing)
+		//return *reinterpret_cast<const std::uint64_t*>(addr.sin6_addr.s6_addr + off);
 	}
 
 	static auto as_tuple(const sockaddr_in6& sock)
